@@ -123,6 +123,24 @@ module.exports = async (
 
 
         // ==================================================
+        // DEACTIVATED (SOFT-DELETED) USER
+        // ==================================================
+
+        if (user.isDeleted) {
+
+            return res.status(403).json({
+
+                success: false,
+
+                message:
+                    "This account is no longer active.",
+
+            });
+
+        }
+
+
+        // ==================================================
         // ATTACH USER TO REQUEST
         // ==================================================
 

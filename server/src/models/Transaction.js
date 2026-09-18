@@ -52,6 +52,7 @@ const transactionSchema = new mongoose.Schema(
         "bonus",
         "admin_credit",
         "admin_debit",
+        "test_credit",
       ],
 
       required: true,
@@ -60,6 +61,18 @@ const transactionSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: true,
+    },
+
+    /*
+     * Which wallet ledger this transaction affected.
+     * Defaults to "real" so existing rows remain valid;
+     * "test"/"bonus" rows come from the test-wallet and
+     * referral-bonus flows respectively.
+     */
+    walletMode: {
+      type: String,
+      enum: ["real", "test", "bonus"],
+      default: "real",
     },
 
     previousBalance: {

@@ -1,5 +1,6 @@
 const bcrypt = require("bcrypt");
 const mongoose = require("mongoose");
+const crypto = require("crypto");
 
 const User =
     require("../models/User");
@@ -18,6 +19,9 @@ const Payout =
 
 const generateTransactionId =
     require("../utils/transactionIdGenerator");
+
+const walletService =
+    require("./walletService");
 
 
 // ======================================================
@@ -66,9 +70,35 @@ const buildUserResponse = (
         status:
             user.status || "active",
 
+        isDeleted:
+            Boolean(
+                user.isDeleted
+            ),
+
+        deletedAt:
+            user.deletedAt || null,
+
+        isPermanentlyDeleted:
+            Boolean(
+                user.isPermanentlyDeleted
+            ),
+
+        permanentlyDeletedAt:
+            user.permanentlyDeletedAt || null,
+
         isVerified:
             Boolean(
                 user.isVerified
+            ),
+
+        emailVerified:
+            Boolean(
+                user.emailVerified
+            ),
+
+        mobileVerified:
+            Boolean(
+                user.mobileVerified
             ),
 
         referralCode:
@@ -1347,6 +1377,329 @@ const updateUserStatus = async (
 };
 
 // ======================================================
+// DEACTIVATE USER (SOFT DELETE)
+// ======================================================
+//
+// Financial/audit/bet/referral records are untouched -
+// they still reference this user's ObjectId. Only login
+// and API access are blocked (see middleware/auth.js and
+// authController.login).
+// ======================================================
+
+const deactivateUser = async (
+    userId
+) => {
+
+    if (
+        !isValidObjectId(
+            userId
+        )
+    ) {
+
+        throw new Error(
+            "Invalid user ID."
+        );
+
+    }
+
+
+    const user =
+        await User.findById(
+            userId
+        );
+
+
+    if (!user) {
+
+        throw new Error(
+            "User not found."
+        );
+
+    }
+
+
+    if (
+        user.role ===
+        "admin"
+    ) {
+
+        throw new Error(
+            "Admin users cannot be deactivated from the Users module."
+        );
+
+    }
+
+
+    if (user.isDeleted) {
+
+        return {
+
+            alreadyDeactivated:
+                true,
+
+            user:
+                buildUserResponse(
+                    user.toObject()
+                ),
+
+        };
+
+    }
+
+
+    user.isDeleted =
+        true;
+
+    user.deletedAt =
+        new Date();
+
+
+    await user.save();
+
+
+    return {
+
+        alreadyDeactivated:
+            false,
+
+        user:
+            buildUserResponse(
+                user.toObject()
+            ),
+
+    };
+
+};
+
+
+// ======================================================
+// PERMANENTLY DELETE USER (anonymize, never hard-delete
+// the document - every financial/bet/transaction/audit/
+// support record must keep resolving to this same user)
+// ======================================================
+
+const deleteUser = async (
+    userId
+) => {
+
+    if (
+        !isValidObjectId(
+            userId
+        )
+    ) {
+
+        throw new Error(
+            "Invalid user ID."
+        );
+
+    }
+
+
+    const user =
+        await User.findById(
+            userId
+        );
+
+
+    if (!user) {
+
+        throw new Error(
+            "User not found."
+        );
+
+    }
+
+
+    if (
+        user.role ===
+        "admin"
+    ) {
+
+        throw new Error(
+            "Admin users cannot be deleted from the Users module."
+        );
+
+    }
+
+
+    if (user.isPermanentlyDeleted) {
+
+        return {
+
+            alreadyDeleted:
+                true,
+
+            user:
+                buildUserResponse(
+                    user.toObject()
+                ),
+
+        };
+
+    }
+
+
+    /*
+     * ==========================================
+     * ANONYMIZE (account data only - never touches
+     * Wallet/Bet/Transaction/DepositRequest/
+     * WithdrawalRequest/Payout/SupportTicket/
+     * Notification/AuditLog, which all keep
+     * referencing this same _id)
+     * ==========================================
+     */
+
+    const anonymizedTag =
+        String(user._id);
+
+    const unusablePasswordHash =
+        await bcrypt.hash(
+            crypto.randomBytes(32).toString("hex"),
+            10
+        );
+
+    user.fullName =
+        "Deleted User";
+
+    user.username =
+        `deleted_${anonymizedTag}`;
+
+    user.email =
+        `deleted_${anonymizedTag}@deleted.local`;
+
+    user.mobile =
+        "";
+
+    user.password =
+        unusablePasswordHash;
+
+    user.status =
+        "blocked";
+
+    user.isDeleted =
+        true;
+
+    user.deletedAt =
+        user.deletedAt || new Date();
+
+    user.isPermanentlyDeleted =
+        true;
+
+    user.permanentlyDeletedAt =
+        new Date();
+
+
+    await user.save();
+
+
+    return {
+
+        alreadyDeleted:
+            false,
+
+        user:
+            buildUserResponse(
+                user.toObject()
+            ),
+
+    };
+
+};
+
+
+// ======================================================
+// ADMIN-INITIATED PASSWORD CHANGE (for a normal user)
+// ======================================================
+
+const changeUserPassword = async (
+    userId,
+    newPassword
+) => {
+
+    if (
+        !isValidObjectId(
+            userId
+        )
+    ) {
+
+        throw new Error(
+            "Invalid user ID."
+        );
+
+    }
+
+
+    if (
+        !newPassword ||
+        String(newPassword).length < 6
+    ) {
+
+        throw new Error(
+            "New password must be at least 6 characters."
+        );
+
+    }
+
+
+    const user =
+        await User.findById(
+            userId
+        );
+
+
+    if (!user) {
+
+        throw new Error(
+            "User not found."
+        );
+
+    }
+
+
+    if (
+        user.role ===
+        "admin"
+    ) {
+
+        throw new Error(
+            "This user's password cannot be changed from the Users module."
+        );
+
+    }
+
+
+    if (user.isPermanentlyDeleted) {
+
+        throw new Error(
+            "This user account has been deleted."
+        );
+
+    }
+
+
+    user.password =
+        await bcrypt.hash(
+            newPassword,
+            10
+        );
+
+
+    await user.save();
+
+
+    return {
+
+        user:
+            buildUserResponse(
+                user.toObject()
+            ),
+
+    };
+
+};
+
+
+// ======================================================
 // CREATE USER
 // ======================================================
 
@@ -1358,7 +1711,6 @@ const createUser = async ({
     password,
     role = "user",
     status = "active",
-    isVerified = false,
 }) => {
 
     /*
@@ -1518,11 +1870,6 @@ const createUser = async ({
                         role,
 
                         status,
-
-                        isVerified:
-                            Boolean(
-                                isVerified
-                            ),
                     },
                 ],
                 {
@@ -1659,7 +2006,6 @@ const updateUser = async (
         mobile,
         role,
         status,
-        isVerified,
     } = {}
 ) => {
 
@@ -1864,6 +2210,15 @@ const updateUser = async (
             );
         }
 
+        // Changing the email invalidates the previous
+        // verification - it must be re-verified via OTP,
+        // never assumed to still be trusted.
+        if (normalizedEmail !== user.email) {
+
+            user.emailVerified = false;
+
+        }
+
         user.email =
             normalizedEmail;
     }
@@ -1872,8 +2227,18 @@ const updateUser = async (
     if (
         mobile !== undefined
     ) {
-        user.mobile =
+
+        const cleanMobile =
             mobile?.trim() || "";
+
+        if (cleanMobile !== user.mobile) {
+
+            user.mobileVerified = false;
+
+        }
+
+        user.mobile =
+            cleanMobile;
     }
 
 
@@ -1890,16 +2255,6 @@ const updateUser = async (
     ) {
         user.status =
             status;
-    }
-
-
-    if (
-        isVerified !== undefined
-    ) {
-        user.isVerified =
-            Boolean(
-                isVerified
-            );
     }
 
 
@@ -2023,98 +2378,21 @@ const adjustUserBalance = async (
 
         /*
          * ==========================================
-         * GET WALLET
+         * ADJUST WALLET
          * ==========================================
-         */
-
-        const wallet =
-            await Wallet.findOne({
-                user:
-                    userId,
-            }).session(
-                session
-            );
-
-
-        if (!wallet) {
-            throw new Error(
-                "Wallet not found."
-            );
-        }
-
-
-        const previousBalance =
-            Number(
-                wallet.balance || 0
-            );
-
-
-        /*
-         * ==========================================
-         * CALCULATE BALANCE
-         * ==========================================
-         */
-
-        let currentBalance;
-
-
-        if (
-            action === "add"
-        ) {
-
-            currentBalance =
-                previousBalance +
-                numericAmount;
-
-        } else {
-
-            if (
-                previousBalance <
-                numericAmount
-            ) {
-                throw new Error(
-                    "Insufficient wallet balance."
-                );
-            }
-
-
-            currentBalance =
-                previousBalance -
-                numericAmount;
-
-        }
-
-
-        /*
-         * ==========================================
-         * UPDATE WALLET
-         * ==========================================
-         */
-
-        wallet.balance =
-            currentBalance;
-
-
-        await wallet.save({
-            session,
-        });
-
-
-        /*
-         * ==========================================
-         * TRANSACTION
-         * ==========================================
+         *
+         * Routed through walletService so admin
+         * balance adjustments use the same atomic,
+         * audited path as every other wallet mutation
+         * (e.g. adminWalletController.adjustUserWallet)
+         * instead of a second, divergent implementation.
          *
          * IMPORTANT:
-         * This is NOT deposit/withdraw.
-         *
-         * Therefore totalDeposit and
-         * totalWithdraw remain unchanged.
+         * admin_credit/admin_debit are NOT deposit/withdraw,
+         * so totalDeposit/totalWithdraw remain unchanged
+         * (walletService only bumps those stats for
+         * "deposit"/"withdraw" typed transactions).
          */
-
-        const transactionId =
-            generateTransactionId();
-
 
         const transactionType =
             action === "add"
@@ -2122,45 +2400,22 @@ const adjustUserBalance = async (
                 : "admin_debit";
 
 
-        const transaction =
-            await Transaction.create(
-                [
-                    {
-                        transactionId,
-
-                        user:
-                            userId,
-
-                        wallet:
-                            wallet._id,
-
-                        type:
-                            transactionType,
-
-                        amount:
-                            numericAmount,
-
-                        previousBalance,
-
-                        currentBalance,
-
-                        status:
-                            "success",
-
-                        remark:
-                            remark.trim(),
-
-                        /*
-                         * If your Transaction model
-                         * supports admin field, we can
-                         * add adminId here later.
-                         */
-                    },
-                ],
-                {
-                    session,
-                }
-            );
+        const walletResult =
+            action === "add"
+                ? await walletService.credit(
+                    userId,
+                    numericAmount,
+                    transactionType,
+                    remark.trim(),
+                    { session }
+                )
+                : await walletService.debit(
+                    userId,
+                    numericAmount,
+                    transactionType,
+                    remark.trim(),
+                    { session }
+                );
 
 
         await session.commitTransaction();
@@ -2175,14 +2430,17 @@ const adjustUserBalance = async (
             amount:
                 numericAmount,
 
-            previousBalance,
+            previousBalance:
+                walletResult.previousBalance,
 
-            currentBalance,
+            currentBalance:
+                walletResult.currentBalance,
 
-            transactionId,
+            transactionId:
+                walletResult.transactionId,
 
             transaction:
-                transaction[0],
+                walletResult.transaction,
 
         };
 
@@ -2251,7 +2509,10 @@ const getUserStats = async () => {
 
         User.countDocuments({
 
-            isVerified:
+            emailVerified:
+                true,
+
+            mobileVerified:
                 true,
 
             role:
@@ -2262,8 +2523,10 @@ const getUserStats = async () => {
 
         User.countDocuments({
 
-            isVerified:
-                false,
+            $or: [
+                { emailVerified: false },
+                { mobileVerified: false },
+            ],
 
             role:
                 "user",
@@ -2449,6 +2712,12 @@ module.exports = {
     updateUser,
 
     updateUserStatus,
+
+    deactivateUser,
+
+    deleteUser,
+
+    changeUserPassword,
 
     adjustUserBalance,
 

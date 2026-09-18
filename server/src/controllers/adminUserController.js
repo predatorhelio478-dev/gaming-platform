@@ -1,6 +1,30 @@
 const adminUserService =
     require("../services/adminUserService");
 
+const { createAuditLog } =
+    require("../services/auditLogService");
+
+const notificationService =
+    require("../services/notificationService");
+
+
+// ======================================================
+// REQUEST CONTEXT (IP / USER AGENT)
+// ======================================================
+
+const getRequestContext = (req) => ({
+
+    ipAddress:
+        req.ip ||
+        req.headers["x-forwarded-for"] ||
+        req.socket?.remoteAddress ||
+        null,
+
+    userAgent:
+        req.headers["user-agent"] || null,
+
+});
+
 
 // ======================================================
 // GET USERS
@@ -193,8 +217,6 @@ const createUser = async (
 
             status,
 
-            isVerified,
-
         } = req.body;
 
 
@@ -214,8 +236,6 @@ const createUser = async (
                 role,
 
                 status,
-
-                isVerified,
 
             });
 
@@ -328,8 +348,6 @@ const updateUser = async (
 
             status,
 
-            isVerified,
-
         } = req.body;
 
 
@@ -351,8 +369,6 @@ const updateUser = async (
                     role,
 
                     status,
-
-                    isVerified,
 
                 }
 
@@ -490,6 +506,29 @@ const updateUserStatus = async (
             );
 
 
+        if (!result.alreadyUpdated) {
+
+            await createAuditLog({
+
+                actorType: "admin",
+
+                actorId: req.admin?._id || null,
+
+                action: "user.status_changed",
+
+                module: "users",
+
+                key: id,
+
+                newValue: status,
+
+                ...getRequestContext(req),
+
+            }).catch(() => {});
+
+        }
+
+
         return res.status(200).json({
 
             success:
@@ -552,6 +591,277 @@ const updateUserStatus = async (
 
             message,
 
+        });
+
+    }
+
+};
+
+
+// ======================================================
+// DEACTIVATE USER (SOFT DELETE)
+// ======================================================
+
+const deactivateUser = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const { id } = req.params;
+
+        if (!id) {
+
+            return res.status(400).json({
+                success: false,
+                message: "User ID is required.",
+            });
+
+        }
+
+        const result =
+            await adminUserService.deactivateUser(id);
+
+        if (!result.alreadyDeactivated) {
+
+            await createAuditLog({
+                actorType: "admin",
+                actorId: req.admin?._id || null,
+                action: "user.deactivated",
+                module: "users",
+                key: id,
+                ...getRequestContext(req),
+            }).catch(() => {});
+
+            notificationService
+                .notifyAdmins(
+                    "admin_action",
+                    "User deactivated",
+                    `User ${result.user?.username || id} was deactivated by an admin.`,
+                    { userId: id, adminId: String(req.admin?._id || "") }
+                )
+                .catch(() => {});
+
+        }
+
+        return res.status(200).json({
+
+            success: true,
+
+            message:
+                result.alreadyDeactivated
+                    ? "User is already deactivated."
+                    : "User deactivated successfully.",
+
+            data: result.user,
+
+            alreadyDeactivated: result.alreadyDeactivated,
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Admin Deactivate User Error:",
+            error
+        );
+
+        const message =
+            error.message ||
+            "Unable to deactivate user.";
+
+        let statusCode = 400;
+
+        if (message === "User not found.") {
+
+            statusCode = 404;
+
+        }
+
+        return res.status(statusCode).json({
+            success: false,
+            message,
+        });
+
+    }
+
+};
+
+
+// ======================================================
+// PERMANENTLY DELETE USER (anonymize)
+// ======================================================
+//
+// A separate action from deactivate - anonymizes the
+// account's identifying data in place rather than just
+// blocking login, while every financial/bet/transaction/
+// audit/support record keeps resolving to the same user _id.
+// ======================================================
+
+const deleteUser = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const { id } = req.params;
+
+        if (!id) {
+
+            return res.status(400).json({
+                success: false,
+                message: "User ID is required.",
+            });
+
+        }
+
+        const result =
+            await adminUserService.deleteUser(id);
+
+        if (!result.alreadyDeleted) {
+
+            await createAuditLog({
+                actorType: "admin",
+                actorId: req.admin?._id || null,
+                action: "user.permanently_deleted",
+                module: "users",
+                key: id,
+                metadata: {
+                    targetUserId: id,
+                    actorAdminId: String(req.admin?._id || ""),
+                },
+                ...getRequestContext(req),
+            }).catch(() => {});
+
+            notificationService
+                .notifyAdmins(
+                    "admin_action",
+                    "User permanently deleted",
+                    `A user account was permanently deleted by an admin.`,
+                    { userId: id, adminId: String(req.admin?._id || "") }
+                )
+                .catch(() => {});
+
+        }
+
+        return res.status(200).json({
+
+            success: true,
+
+            message:
+                result.alreadyDeleted
+                    ? "User is already deleted."
+                    : "User permanently deleted. Financial and activity history has been preserved.",
+
+            data: result.user,
+
+            alreadyDeleted: result.alreadyDeleted,
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Admin Delete User Error:",
+            error
+        );
+
+        const message =
+            error.message ||
+            "Unable to delete user.";
+
+        let statusCode = 400;
+
+        if (message === "User not found.") {
+
+            statusCode = 404;
+
+        }
+
+        return res.status(statusCode).json({
+            success: false,
+            message,
+        });
+
+    }
+
+};
+
+
+// ======================================================
+// ADMIN-INITIATED PASSWORD CHANGE (for a normal user)
+// ======================================================
+//
+// Audited without ever logging the password/hash - only the
+// fact that a change happened, and who performed it.
+// ======================================================
+
+const changeUserPassword = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const { id } = req.params;
+        const { newPassword } = req.body;
+
+        if (!id) {
+
+            return res.status(400).json({
+                success: false,
+                message: "User ID is required.",
+            });
+
+        }
+
+        await adminUserService.changeUserPassword(
+            id,
+            newPassword
+        );
+
+        await createAuditLog({
+            actorType: "admin",
+            actorId: req.admin?._id || null,
+            action: "user.password_changed_by_admin",
+            module: "users",
+            key: id,
+            metadata: {
+                targetUserId: id,
+                actorAdminId: String(req.admin?._id || ""),
+            },
+            ...getRequestContext(req),
+        }).catch(() => {});
+
+        return res.status(200).json({
+            success: true,
+            message: "User password changed successfully.",
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Admin Change User Password Error:",
+            error.message
+        );
+
+        const message =
+            error.message ||
+            "Unable to change user password.";
+
+        let statusCode = 400;
+
+        if (message === "User not found.") {
+
+            statusCode = 404;
+
+        }
+
+        return res.status(statusCode).json({
+            success: false,
+            message,
         });
 
     }
@@ -706,6 +1016,35 @@ const adjustUserBalance = async (
             );
 
 
+        await createAuditLog({
+
+            actorType: "admin",
+
+            actorId: adminId,
+
+            action:
+                action === "add"
+                    ? "wallet.admin_credit"
+                    : "wallet.admin_debit",
+
+            module: "wallet",
+
+            key: id,
+
+            oldValue: result.previousBalance,
+
+            newValue: result.currentBalance,
+
+            metadata: {
+                amount: result.amount,
+                remark: remark.trim(),
+            },
+
+            ...getRequestContext(req),
+
+        }).catch(() => {});
+
+
         return res.status(200).json({
 
             success:
@@ -857,6 +1196,12 @@ module.exports = {
     updateUser,
 
     updateUserStatus,
+
+    deactivateUser,
+
+    deleteUser,
+
+    changeUserPassword,
 
     adjustUserBalance,
 

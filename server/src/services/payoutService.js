@@ -18,8 +18,304 @@ const walletService =
 const PayoutRefund =
     require("../models/PayoutRefund");
 
+const settingsService =
+    require("./settingsService");
 
-const PAYOUT_MULTIPLIER = 2;
+const notificationService =
+    require("./notificationService");
+
+const { createAuditLog } =
+    require("./auditLogService");
+
+
+const DEFAULT_PAYOUT_MULTIPLIER = 2;
+
+const DEFAULT_BONUS_CONVERSION_RATE = 30;
+
+// Total attempts (including the first) before an automatic
+// payout is escalated to "manual_review" for admin attention.
+const MAX_AUTO_PAYOUT_ATTEMPTS = 3;
+
+
+/*
+|--------------------------------------------------------------------------
+| CREDIT A WIN, POOL-AWARE
+|--------------------------------------------------------------------------
+|
+| real  -> unchanged: full amount to wallet.balance.
+| test  -> full amount stays in wallet.testBalance.
+| bonus -> split: bonus_conversion_rate% of the winnings
+|          convert to real (withdrawable) balance, the
+|          remainder stays in wallet.bonusBalance
+|          (bet-only, never withdrawable). Both legs are
+|          credited atomically in one Mongo transaction so
+|          a mid-split failure can't leave a partial credit.
+|--------------------------------------------------------------------------
+*/
+
+const creditPayoutByMode = async (
+    bet,
+    payoutAmount,
+    roundNumber,
+    payoutId
+) => {
+
+    if (
+        bet.walletMode ===
+        "test"
+    ) {
+
+        return walletService.creditPool(
+            bet.user,
+            payoutAmount,
+            "win",
+            `Color Prediction Win - Round ${roundNumber}`,
+            "testBalance",
+            { payoutId }
+        );
+
+    }
+
+
+    /*
+     * "real" mode bets that were partially funded from
+     * bonusBalance (see betService.computeBonusSplit - up to
+     * 30% of the bet amount). The bonus portion simply RETURNS
+     * to bonusBalance (never converted to real money, no
+     * multiplier applied - it's the user's own stake coming
+     * back). The real-money portion is what the payout
+     * multiplier actually applies to. computePayoutAmount()
+     * (below) already builds `payoutAmount` as
+     * bet.bonusAmount + bet.realAmount * multiplier, so the
+     * real leg here is just payoutAmount - bonusAmount. Both
+     * legs are credited atomically in one Mongo transaction.
+     */
+
+    const bonusAmount =
+        Number(
+            bet.bonusAmount || 0
+        );
+
+    if (
+        bet.walletMode ===
+        "real" &&
+        bonusAmount > 0
+    ) {
+
+        const realPayout =
+            Math.round(
+                (payoutAmount - bonusAmount) *
+                100
+            ) / 100;
+
+
+        const session =
+            await mongoose.startSession();
+
+
+        try {
+
+            session.startTransaction();
+
+
+            const bonusResult =
+                await walletService.creditPool(
+                    bet.user,
+                    bonusAmount,
+                    "win",
+                    `Color Prediction - Bonus stake returned - Round ${roundNumber}`,
+                    "bonusBalance",
+                    { payoutId, session }
+                );
+
+
+            const realResult =
+                realPayout > 0
+                    ? await walletService.credit(
+                        bet.user,
+                        realPayout,
+                        "win",
+                        `Color Prediction Win (real-money portion) - Round ${roundNumber}`,
+                        { payoutId, session }
+                    )
+                    : null;
+
+
+            await session.commitTransaction();
+
+
+            return realResult || bonusResult;
+
+        } catch (error) {
+
+            await session.abortTransaction();
+
+            throw error;
+
+        } finally {
+
+            await session.endSession();
+
+        }
+
+    }
+
+
+    if (
+        bet.walletMode ===
+        "bonus"
+    ) {
+
+        const conversionRate =
+            Number(
+                await settingsService.getValue(
+                    "user",
+                    "bonus_conversion_rate",
+                    DEFAULT_BONUS_CONVERSION_RATE
+                )
+            ) ||
+            DEFAULT_BONUS_CONVERSION_RATE;
+
+
+        const realPart =
+            Math.round(
+                payoutAmount *
+                (conversionRate / 100) *
+                100
+            ) / 100;
+
+
+        const bonusPart =
+            Math.round(
+                (payoutAmount - realPart) *
+                100
+            ) / 100;
+
+
+        const session =
+            await mongoose.startSession();
+
+
+        try {
+
+            session.startTransaction();
+
+
+            const realResult =
+                realPart > 0
+                    ? await walletService.credit(
+                        bet.user,
+                        realPart,
+                        "win",
+                        `Color Prediction Win (${conversionRate}% bonus conversion) - Round ${roundNumber}`,
+                        { payoutId, session }
+                    )
+                    : null;
+
+
+            const bonusResult =
+                bonusPart > 0
+                    ? await walletService.creditPool(
+                        bet.user,
+                        bonusPart,
+                        "win",
+                        `Color Prediction Win (bonus retained) - Round ${roundNumber}`,
+                        "bonusBalance",
+                        { payoutId, session }
+                    )
+                    : null;
+
+
+            await session.commitTransaction();
+
+
+            return realResult || bonusResult;
+
+        } catch (error) {
+
+            await session.abortTransaction();
+
+            throw error;
+
+        } finally {
+
+            await session.endSession();
+
+        }
+
+    }
+
+
+    /*
+     * "real" (default / backward compatible)
+     */
+
+    return walletService.credit(
+        bet.user,
+        payoutAmount,
+        "win",
+        `Color Prediction Win - Round ${roundNumber}`,
+        { payoutId }
+    );
+
+};
+
+
+/*
+|--------------------------------------------------------------------------
+| COMPUTE TOTAL PAYOUT AMOUNT FOR A WINNING BET
+|--------------------------------------------------------------------------
+|
+| "real" mode bets with a bonusAmount (30%-cap blended bets):
+| total credited = bonusAmount (returned as-is) + realAmount *
+| multiplier. When bonusAmount is 0 (plain real bet, or a bet
+| placed before this split existed), this is identical to the
+| original bet.amount * multiplier - fully backward compatible.
+| "test"/legacy "bonus" mode bets are unaffected: bet.amount *
+| multiplier, same as always.
+|--------------------------------------------------------------------------
+*/
+
+const computePayoutAmount = (
+    bet,
+    payoutMultiplier
+) => {
+
+    const bonusAmount =
+        Number(
+            bet.bonusAmount || 0
+        );
+
+    if (
+        bet.walletMode ===
+        "real" &&
+        bonusAmount > 0
+    ) {
+
+        const realAmount =
+            bet.realAmount != null
+                ? Number(bet.realAmount)
+                : Math.max(
+                    Number(bet.amount) - bonusAmount,
+                    0
+                );
+
+        return (
+            Math.round(
+                (bonusAmount +
+                    realAmount * payoutMultiplier) *
+                100
+            ) / 100
+        );
+
+    }
+
+    return (
+        Number(bet.amount) *
+        payoutMultiplier
+    );
+
+};
 
 
 /*
@@ -83,6 +379,17 @@ class PayoutService {
             roundId;
 
 
+        const payoutMultiplier =
+            Number(
+                await settingsService.getValue(
+                    "game",
+                    "payout_multiplier",
+                    DEFAULT_PAYOUT_MULTIPLIER
+                )
+            ) ||
+            DEFAULT_PAYOUT_MULTIPLIER;
+
+
         /*
          * ==========================================
          * PROCESS EACH BET
@@ -128,10 +435,10 @@ class PayoutService {
              */
 
             const payoutAmount =
-                Number(
-                    bet.amount
-                ) *
-                PAYOUT_MULTIPLIER;
+                computePayoutAmount(
+                    bet,
+                    payoutMultiplier
+                );
 
 
             /*
@@ -269,6 +576,10 @@ class PayoutService {
 
                             payoutAmount:
                                 payoutAmount,
+
+                            walletMode:
+                                bet.walletMode ||
+                                "real",
 
                             status:
                                 "pending",
@@ -408,49 +719,161 @@ class PayoutService {
 
             /*
              * ==========================================
-             * PROCESSING
+             * PROCESSING - AUTOMATIC RETRY (up to
+             * MAX_AUTO_PAYOUT_ATTEMPTS total attempts)
+             * ==========================================
+             *
+             * Each attempt is immediate (no delay) since this
+             * runs once per round settlement, not on a hot
+             * path - a transient DB/network blip is expected
+             * to clear within milliseconds. Between attempts,
+             * the win Transaction is re-checked so a "failure"
+             * caused only by a slow/ambiguous response (the
+             * credit actually landed) is detected and treated
+             * as success rather than retried again.
              * ==========================================
              */
 
-            payout.status =
-                "processing";
+            let walletResult =
+                null;
 
-            payout.failureReason =
-                "";
+            let lastError =
+                null;
 
-            await payout.save();
+            let attemptsMade =
+                0;
 
 
-            try {
+            for (
+                let attempt = 1;
+                attempt <= MAX_AUTO_PAYOUT_ATTEMPTS;
+                attempt++
+            ) {
 
-                /*
-                 * ==========================================
-                 * CREDIT WALLET
-                 * ==========================================
-                 */
+                attemptsMade =
+                    attempt;
 
-                const walletResult =
-                    await walletService.credit(
+                payout.status =
+                    "processing";
 
-                        bet.user,
+                payout.retryCount =
+                    attempt - 1;
 
-                        payoutAmount,
+                payout.failureReason =
+                    "";
 
-                        "win",
+                await payout.save();
 
-                        `Color Prediction Win - Round ${roundNumber}`,
 
+                try {
+
+                    /*
+                     * ==========================================
+                     * CREDIT WALLET (pool matching bet.walletMode)
+                     * ==========================================
+                     *
+                     * real  -> full amount to real balance (unchanged).
+                     * test  -> full amount stays in the test ledger.
+                     * bonus -> split: bonus_conversion_rate% converts
+                     *          to real (withdrawable) balance, the
+                     *          remainder stays as bonus balance
+                     *          (bet-only). Both legs are credited
+                     *          atomically in one Mongo transaction.
+                     */
+
+                    walletResult =
+                        await creditPayoutByMode(
+                            bet,
+                            payoutAmount,
+                            roundNumber,
+                            payout._id
+                        );
+
+                    lastError =
+                        null;
+
+                    break;
+
+
+                } catch (
+                error
+                ) {
+
+                    lastError =
+                        error;
+
+
+                    /*
+                     * ==========================================
+                     * CHECK WIN TRANSACTION AGAIN
+                     * ==========================================
+                     *
+                     * The credit may have actually succeeded
+                     * even though this attempt threw (e.g. a
+                     * timeout on the response, not the write).
+                     * ==========================================
+                     */
+
+                    const transactionAfterError =
+                        await Transaction.findOne({
+
+                            payout:
+                                payout._id,
+
+                            type:
+                                "win",
+
+                        });
+
+
+                    if (
+                        transactionAfterError
+                    ) {
+
+                        walletResult = {
+                            transactionId:
+                                transactionAfterError
+                                    .transactionId,
+                        };
+
+                        lastError =
+                            null;
+
+                        break;
+
+                    }
+
+
+                    console.error(
+                        `PAYOUT ATTEMPT ${attempt}/${MAX_AUTO_PAYOUT_ATTEMPTS} FAILED`,
                         {
                             payoutId:
                                 payout._id,
-                        }
 
+                            betId:
+                                bet._id,
+
+                            userId:
+                                bet.user,
+
+                            amount:
+                                payoutAmount,
+
+                            error:
+                                error?.message,
+                        }
                     );
 
+                }
+
+            }
+
+
+            if (!lastError) {
 
                 /*
                  * ==========================================
-                 * UPDATE BET
+                 * SUCCESS (on attempt 1, 2 or 3)
                  * ==========================================
                  */
 
@@ -462,12 +885,6 @@ class PayoutService {
 
                 await bet.save();
 
-
-                /*
-                 * ==========================================
-                 * MARK PAYOUT PAID
-                 * ==========================================
-                 */
 
                 payout.status =
                     "paid";
@@ -484,10 +901,25 @@ class PayoutService {
                 payout.failureReason =
                     "";
 
+                payout.retryCount =
+                    attemptsMade - 1;
+
                 payout.remark =
-                    "Payout credited successfully.";
+                    attemptsMade > 1
+                        ? `Payout credited successfully after ${attemptsMade} attempt(s).`
+                        : "Payout credited successfully.";
 
                 await payout.save();
+
+                notificationService
+                    .notify(
+                        bet.user,
+                        "bet_won",
+                        "You won!",
+                        `Your bet on ${winningColor} won! ₹${payoutAmount} has been credited.`,
+                        { payoutId: String(payout._id), betId: String(bet._id), roundNumber }
+                    )
+                    .catch(() => {});
 
 
                 totalPayout +=
@@ -496,103 +928,44 @@ class PayoutService {
                 winningBets++;
 
 
-            } catch (
-            error
-            ) {
+            } else {
 
                 /*
                  * ==========================================
-                 * CHECK WIN TRANSACTION AGAIN
+                 * ALL ATTEMPTS EXHAUSTED - REQUIRES ATTENTION
                  * ==========================================
-                 */
-
-                const transactionAfterError =
-                    await Transaction.findOne({
-
-                        payout:
-                            payout._id,
-
-                        type:
-                            "win",
-
-                    });
-
-
-                if (
-                    transactionAfterError
-                ) {
-
-                    bet.result =
-                        "won";
-
-                    bet.payout =
-                        payoutAmount;
-
-                    await bet.save();
-
-
-                    payout.status =
-                        "paid";
-
-                    payout.transactionId =
-                        transactionAfterError
-                            .transactionId;
-
-                    payout.processedAt =
-                        payout.processedAt ||
-                        transactionAfterError
-                            .createdAt ||
-                        new Date();
-
-                    payout.failureReason =
-                        "";
-
-                    payout.remark =
-                        "Payout transaction already existed; payout synchronized.";
-
-                    await payout.save();
-
-
-                    totalPayout +=
-                        payoutAmount;
-
-                    winningBets++;
-
-                    continue;
-
-                }
-
-
-                /*
-                 * ==========================================
-                 * PAYOUT FAILED
+                 *
+                 * Escalated to the project's existing
+                 * "manual_review" status (not "failed") so it
+                 * surfaces in the admin Payout Attention view
+                 * and is never silently lost. The bet itself
+                 * stays "pending" (not "lost") so it is never
+                 * mistaken for a loss while payout is still
+                 * outstanding.
                  * ==========================================
                  */
 
                 payout.status =
-                    "failed";
+                    "manual_review";
 
                 payout.failureReason =
-                    error?.message ||
+                    lastError?.message ||
                     "Wallet credit failed.";
 
                 payout.retryCount =
-                    Number(
-                        payout.retryCount ||
-                        0
-                    ) + 1;
+                    MAX_AUTO_PAYOUT_ATTEMPTS;
 
                 payout.remark =
-                    "Payout processing failed.";
+                    `Automatic payout failed after ${MAX_AUTO_PAYOUT_ATTEMPTS} attempts - requires manual attention.`;
 
                 await payout.save();
 
 
-                failedPayouts++;
+                pendingPayouts++;
 
 
                 console.error(
-                    "PAYOUT FAILED",
+                    "PAYOUT REQUIRES ATTENTION (all automatic attempts failed)",
                     {
                         payoutId:
                             payout._id,
@@ -606,10 +979,40 @@ class PayoutService {
                         amount:
                             payoutAmount,
 
+                        attempts:
+                            MAX_AUTO_PAYOUT_ATTEMPTS,
+
                         error:
-                            error?.message,
+                            lastError?.message,
                     }
                 );
+
+
+                createAuditLog({
+                    actorType: "system",
+                    action: "payout.requires_attention",
+                    module: "payouts",
+                    key: String(payout._id),
+                    metadata: {
+                        roundId: String(roundId),
+                        roundNumber,
+                        userId: String(bet.user),
+                        betId: String(bet._id),
+                        payoutAmount,
+                        attempts: MAX_AUTO_PAYOUT_ATTEMPTS,
+                        failureReason: payout.failureReason,
+                    },
+                }).catch(() => {});
+
+
+                notificationService
+                    .notifyAdmins(
+                        "payout_requires_attention",
+                        "Payout requires attention",
+                        `Payout of ₹${payoutAmount} for round ${roundNumber} failed after ${MAX_AUTO_PAYOUT_ATTEMPTS} attempts and needs manual review.`,
+                        { payoutId: String(payout._id), betId: String(bet._id), roundNumber }
+                    )
+                    .catch(() => {});
 
             }
 
@@ -892,25 +1295,24 @@ class PayoutService {
 
             /*
              * ==========================================
-             * CREDIT WALLET
+             * CREDIT WALLET (pool-aware, same helper the
+             * primary settlement path uses - keeps "real"
+             * mode bets with a bonus split correctly
+             * crediting bonus back to bonusBalance instead
+             * of putting the whole amount into real balance)
              * ==========================================
              */
 
             const walletResult =
-                await walletService.credit(
+                await creditPayoutByMode(
 
-                    bet.user,
+                    bet,
 
                     payoutAmount,
 
-                    "win",
+                    roundNumber,
 
-                    `Color Prediction Win - Round ${roundNumber}`,
-
-                    {
-                        payoutId:
-                            payout._id,
-                    }
+                    payout._id
 
                 );
 

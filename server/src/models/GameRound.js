@@ -20,6 +20,7 @@ const gameRoundSchema = new mongoose.Schema(
                 "betting",
                 "locked",
                 "completed",
+                "void",
             ],
             default: "betting",
         },

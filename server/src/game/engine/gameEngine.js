@@ -13,12 +13,25 @@ const GameHistory =
 const GameRound =
     require("../../models/GameRound");
 
+const Bet =
+    require("../../models/Bet");
+
+const walletService =
+    require("../../services/walletService");
+
 const payoutManager =
     require("./payoutManager");
 
 const {
     getIO,
 } = require("../../socket/socket");
+
+const notificationService =
+    require("../../services/notificationService");
+
+const {
+    createAuditLog,
+} = require("../../services/auditLogService");
 
 
 let currentRound = null;
@@ -232,7 +245,15 @@ const startRound = async () => {
                         currentRound,
 
                     remainingSeconds:
-                        30,
+                        Math.max(
+                            Math.ceil(
+                                (
+                                    currentRound.endTime.getTime() -
+                                    Date.now()
+                                ) / 1000
+                            ),
+                            0
+                        ),
                 }
             );
 
@@ -246,7 +267,15 @@ const startRound = async () => {
                         currentRound,
 
                     remainingSeconds:
-                        30,
+                        Math.max(
+                            Math.ceil(
+                                (
+                                    currentRound.endTime.getTime() -
+                                    Date.now()
+                                ) / 1000
+                            ),
+                            0
+                        ),
                 }
             );
 
@@ -264,7 +293,20 @@ const startRound = async () => {
          * Start Timer
          */
 
+        const roundDuration =
+            Math.max(
+                Math.ceil(
+                    (
+                        currentRound.endTime.getTime() -
+                        currentRound.startTime.getTime()
+                    ) / 1000
+                ),
+                1
+            );
+
+
         timer.startTimer(
+            roundDuration,
             processRound
         );
 
@@ -281,6 +323,70 @@ const startRound = async () => {
         );
 
     }
+
+};
+
+
+// ==========================================
+// GET PER-COLOR BET TOTALS FOR A ROUND
+// ==========================================
+//
+// Reads directly from the Bet collection (the authoritative
+// source, not a running counter) so the totals used to pick
+// the winning color always reflect every bet actually placed.
+// Safe to call only once betting is locked (see processRound
+// below) - betService.placeBet() itself rejects any bet once
+// the round's status is no longer "betting", so no bet can be
+// placed for this round after this point.
+// ==========================================
+
+const getColorTotals = async (
+    roundId
+) => {
+
+    const rows =
+        await Bet.aggregate([
+
+            {
+                $match: {
+                    round: roundId,
+                },
+            },
+
+            {
+                $group: {
+                    _id: "$color",
+                    total: { $sum: "$amount" },
+                },
+            },
+
+        ]);
+
+
+    const totals = {
+        red: 0,
+        green: 0,
+        blue: 0,
+    };
+
+
+    for (const row of rows) {
+
+        if (
+            Object.prototype.hasOwnProperty.call(
+                totals,
+                row._id
+            )
+        ) {
+
+            totals[row._id] = row.total;
+
+        }
+
+    }
+
+
+    return totals;
 
 };
 
@@ -381,16 +487,70 @@ const processRound = async () => {
 
 
         /*
-         * Generate result
+         * Generate result - server-authoritative: the winning
+         * color is always whichever color has the LOWEST total
+         * bet amount for this round (ties broken randomly among
+         * only the tied colors). Computed strictly from bets
+         * already persisted in the DB after betting was locked
+         * above - no client/frontend input is ever involved.
          */
 
-        const result =
-            generateResult();
+        const colorTotals =
+            await getColorTotals(
+                currentRound._id
+            );
+
+        const {
+            result,
+            lowestAmount,
+            tiedColors,
+        } = generateResult(colorTotals);
 
 
         console.log(
-            `Round ${currentRound.roundNumber} Result: ${result}`
+            `Round ${currentRound.roundNumber} Bet Totals - ` +
+            `Red: ${colorTotals.red}, Green: ${colorTotals.green}, Blue: ${colorTotals.blue}`
         );
+
+        console.log(
+            `Round ${currentRound.roundNumber} Result: ${result}` +
+            (
+                tiedColors.length > 1
+                    ? ` (tie-break among: ${tiedColors.join(", ")} @ ${lowestAmount})`
+                    : ""
+            )
+        );
+
+
+        /*
+         * Audit log (system-generated, durable record for
+         * admin/audit/debugging) - aggregate bet totals and the
+         * selected color only, never user-identifying or
+         * financial-account data.
+         */
+
+        createAuditLog({
+            actorType: "system",
+            action: "game.round_result_settled",
+            module: "game",
+            key: String(currentRound.roundNumber),
+            metadata: {
+                roundId: String(currentRound._id),
+                roundNumber: currentRound.roundNumber,
+                colorTotals,
+                lowestAmount,
+                selectedColor: result,
+                tieBreak: tiedColors.length > 1,
+                tiedColors,
+            },
+        }).catch((error) => {
+
+            console.error(
+                "Round Result Audit Log Error:",
+                error.message
+            );
+
+        });
 
 
         /*
@@ -561,6 +721,119 @@ const processRound = async () => {
 // START GAME
 // ==========================================
 
+// ==========================================
+// RECOVER ORPHANED ROUND
+// ==========================================
+//
+// If the process crashed/restarted mid-round, a GameRound
+// can be left in "betting"/"locked" with no engine watching
+// it. Safely void it and refund every pending bet placed in
+// it (to whichever wallet pool it was staked from) rather
+// than silently orphaning that money.
+// ==========================================
+
+const recoverOrphanedRound = async () => {
+
+    try {
+
+        const orphanedRound =
+            await GameRound.findOne({
+                status: {
+                    $in: ["betting", "locked"],
+                },
+            }).sort({
+                roundNumber: -1,
+            });
+
+        if (!orphanedRound) {
+
+            return;
+
+        }
+
+        console.warn(
+            `Recovering orphaned round #${orphanedRound.roundNumber} left in "${orphanedRound.status}" from before restart.`
+        );
+
+        const pendingBets =
+            await Bet.find({
+                round: orphanedRound._id,
+                result: "pending",
+            });
+
+        for (const bet of pendingBets) {
+
+            try {
+
+                const remark =
+                    `Refund - Round ${orphanedRound.roundNumber} voided on server restart`;
+
+                if (bet.walletMode === "real") {
+
+                    await walletService.credit(
+                        bet.user,
+                        bet.amount,
+                        "refund",
+                        remark
+                    );
+
+                } else {
+
+                    await walletService.creditPool(
+                        bet.user,
+                        bet.amount,
+                        "refund",
+                        remark,
+                        bet.walletMode === "test"
+                            ? "testBalance"
+                            : "bonusBalance"
+                    );
+
+                }
+
+                bet.result = "voided";
+
+                await bet.save();
+
+            } catch (refundError) {
+
+                console.error(
+                    "Orphaned Bet Refund Error:",
+                    refundError.message
+                );
+
+            }
+
+        }
+
+        const previousStatus =
+            orphanedRound.status;
+
+        orphanedRound.status = "void";
+
+        await orphanedRound.save();
+
+        notificationService
+            .notifyAdmins(
+                "system",
+                "Orphaned round recovered",
+                `Round #${orphanedRound.roundNumber} was left in "${previousStatus}" after a server restart and has been voided. ${pendingBets.length} pending bet(s) were refunded.`,
+                { roundId: String(orphanedRound._id), roundNumber: orphanedRound.roundNumber, refundedBets: pendingBets.length }
+            )
+            .catch(() => {});
+
+    } catch (error) {
+
+        console.error(
+            "Recover Orphaned Round Error:",
+            error.message
+        );
+
+    }
+
+};
+
+
 const startGame = async () => {
 
     if (gameRunning) {
@@ -598,6 +871,9 @@ const startGame = async () => {
     console.log(
         "Game Engine Started By Admin"
     );
+
+
+    await recoverOrphanedRound();
 
 
     await startRound();

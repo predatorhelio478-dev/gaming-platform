@@ -10,6 +10,12 @@ const adminUserController =
 const adminAuth =
     require("../middleware/adminAuth");
 
+const requireAdminRole =
+    require("../middleware/requireAdminRole");
+
+const { adminChangeUserPasswordValidators } =
+    require("../validators/requestValidators");
+
 
 // ======================================================
 // GET USERS
@@ -125,12 +131,81 @@ router.patch(
 //   "remark": "Balance correction"
 // }
 //
+// Restricted to admin/super_admin - directly mutates a
+// user's real money outside the normal deposit/withdrawal
+// flow, so the lowest-trust "operator" role must not be able
+// to call this.
+//
 // ======================================================
 
 router.post(
     "/:id/balance",
     adminAuth,
+    requireAdminRole("super_admin", "admin"),
     adminUserController.adjustUserBalance
+);
+
+
+// ======================================================
+// DEACTIVATE USER (SOFT DELETE)
+// ======================================================
+//
+// DELETE /api/admin/users/:id
+//
+// Restricted to admin/super_admin - a destructive-adjacent
+// action that blocks a user's login/access while
+// preserving their financial/audit/bet/referral history.
+// Widened from super_admin-only to admin+super_admin per
+// explicit instruction; operator remains excluded.
+//
+// ======================================================
+
+router.delete(
+    "/:id",
+    adminAuth,
+    requireAdminRole("super_admin", "admin"),
+    adminUserController.deactivateUser
+);
+
+
+// ======================================================
+// PERMANENTLY DELETE USER (anonymize)
+// ======================================================
+//
+// DELETE /api/admin/users/:id/permanent
+//
+// Separate action from deactivate - restricted to
+// admin/super_admin, never operator. Only ever anonymizes a
+// "user"-role account (never role:"admin"); all financial/
+// bet/transaction/audit/support records stay intact.
+//
+// ======================================================
+
+router.delete(
+    "/:id/permanent",
+    adminAuth,
+    requireAdminRole("super_admin", "admin"),
+    adminUserController.deleteUser
+);
+
+
+// ======================================================
+// ADMIN-INITIATED PASSWORD CHANGE (for a normal user)
+// ======================================================
+//
+// POST /api/admin/users/:id/password
+//
+// Restricted to admin/super_admin, never operator. Only
+// ever applies to a "user"-role account.
+//
+// ======================================================
+
+router.post(
+    "/:id/password",
+    adminAuth,
+    requireAdminRole("super_admin", "admin"),
+    adminChangeUserPasswordValidators,
+    adminUserController.changeUserPassword
 );
 
 

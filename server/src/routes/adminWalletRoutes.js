@@ -6,6 +6,17 @@ const router =
 const adminWalletController =
     require("../controllers/adminWalletController");
 
+const adminAuth =
+    require("../middleware/adminAuth");
+
+const requireAdminRole =
+    require("../middleware/requireAdminRole");
+
+const { adminWalletAdjustValidators } =
+    require("../validators/requestValidators");
+
+router.use(adminAuth);
+
 
 // ======================================================
 // ADMIN WALLET OVERVIEW
@@ -50,9 +61,15 @@ router.get(
 // ======================================================
 // ADJUST USER WALLET
 // ======================================================
+//
+// Restricted to admin/super_admin - directly mutates real
+// money outside the normal deposit/withdrawal flow.
+// ======================================================
 
 router.post(
     "/adjust",
+    requireAdminRole("super_admin", "admin"),
+    adminWalletAdjustValidators,
     adminWalletController.adjustUserWallet
 );
 

@@ -1583,12 +1583,648 @@ class WalletService {
   */
 
   async getWallet(
-    userId
+    userId,
+    options = {}
   ) {
 
     return await Wallet.findOne({
       user: userId,
-    });
+    }).session(
+      options?.session || null
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | CREDIT POOL (test / bonus balances)
+  |--------------------------------------------------------------------------
+  |
+  | Mirrors credit() but targets a separate, non-"balance"
+  | ledger (testBalance / bonusBalance). Real `balance`
+  | continues to go through credit()/debit() above,
+  | unchanged. These pools NEVER mix with real balance.
+  */
+
+  async creditPool(
+    userId,
+    amount,
+    type,
+    remark = "",
+    pool,
+    options = {}
+  ) {
+
+    if (
+      !["testBalance", "bonusBalance"].includes(pool)
+    ) {
+      throw new Error(
+        "Invalid wallet pool."
+      );
+    }
+
+    const numericAmount =
+      Number(amount);
+
+    if (
+      !Number.isFinite(numericAmount) ||
+      numericAmount <= 0
+    ) {
+      throw new Error(
+        "Invalid credit amount."
+      );
+    }
+
+    const externalSession =
+      options?.session || null;
+
+    const session =
+      externalSession ||
+      await mongoose.startSession();
+
+    const shouldEndSession =
+      !externalSession;
+
+    const walletMode =
+      pool === "testBalance" ? "test" : "bonus";
+
+    try {
+
+      if (shouldEndSession) {
+        session.startTransaction();
+      }
+
+      const wallet =
+        await Wallet.findOne({
+          user: userId,
+        }).session(session);
+
+      if (!wallet) {
+        throw new Error(
+          "Wallet not found"
+        );
+      }
+
+      const previousBalance =
+        Number(wallet[pool] || 0);
+
+      const currentBalance =
+        previousBalance + numericAmount;
+
+      wallet[pool] =
+        currentBalance;
+
+      await wallet.save({
+        session,
+      });
+
+      const transactionId =
+        generateTransactionId();
+
+      const transaction =
+        await Transaction.create(
+          [
+            {
+              transactionId,
+              user: userId,
+              wallet: wallet._id,
+              ...(options?.payoutId
+                ? { payout: options.payoutId }
+                : {}),
+              type,
+              walletMode,
+              amount: numericAmount,
+              previousBalance,
+              currentBalance,
+              status: "success",
+              remark,
+            },
+          ],
+          { session }
+        );
+
+      if (shouldEndSession) {
+        await session.commitTransaction();
+      }
+
+      return {
+        wallet,
+        transaction: transaction[0],
+        transactionId,
+        previousBalance,
+        currentBalance,
+      };
+
+    } catch (error) {
+
+      if (shouldEndSession) {
+        await session.abortTransaction();
+      }
+
+      throw error;
+
+    } finally {
+
+      if (shouldEndSession) {
+        await session.endSession();
+      }
+
+    }
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | DEBIT POOL (test / bonus balances)
+  |--------------------------------------------------------------------------
+  |
+  | Mirrors debit(), but only ever touches the named pool.
+  | Never falls back to another pool if that pool is short.
+  */
+
+  async debitPool(
+    userId,
+    amount,
+    type,
+    remark = "",
+    pool,
+    options = {}
+  ) {
+
+    if (
+      !["testBalance", "bonusBalance"].includes(pool)
+    ) {
+      throw new Error(
+        "Invalid wallet pool."
+      );
+    }
+
+    const numericAmount =
+      Number(amount);
+
+    if (
+      !Number.isFinite(numericAmount) ||
+      numericAmount <= 0
+    ) {
+      throw new Error(
+        "Invalid debit amount."
+      );
+    }
+
+    const externalSession =
+      options?.session || null;
+
+    const session =
+      externalSession ||
+      await mongoose.startSession();
+
+    const shouldEndSession =
+      !externalSession;
+
+    const walletMode =
+      pool === "testBalance" ? "test" : "bonus";
+
+    try {
+
+      if (shouldEndSession) {
+        session.startTransaction();
+      }
+
+      const wallet =
+        await Wallet.findOne({
+          user: userId,
+        }).session(session);
+
+      if (!wallet) {
+        throw new Error(
+          "Wallet not found"
+        );
+      }
+
+      const previousBalance =
+        Number(wallet[pool] || 0);
+
+      if (previousBalance < numericAmount) {
+        throw new Error(
+          pool === "testBalance"
+            ? "Insufficient test balance."
+            : "Insufficient bonus balance."
+        );
+      }
+
+      const currentBalance =
+        previousBalance - numericAmount;
+
+      wallet[pool] =
+        currentBalance;
+
+      await wallet.save({
+        session,
+      });
+
+      const transactionId =
+        generateTransactionId();
+
+      const transaction =
+        await Transaction.create(
+          [
+            {
+              transactionId,
+              user: userId,
+              wallet: wallet._id,
+              ...(options?.payoutId
+                ? { payout: options.payoutId }
+                : {}),
+              type,
+              walletMode,
+              amount: numericAmount,
+              previousBalance,
+              currentBalance,
+              status: "success",
+              remark,
+            },
+          ],
+          { session }
+        );
+
+      if (shouldEndSession) {
+        await session.commitTransaction();
+      }
+
+      return {
+        wallet,
+        transaction: transaction[0],
+        transactionId,
+        previousBalance,
+        currentBalance,
+      };
+
+    } catch (error) {
+
+      if (shouldEndSession) {
+        await session.abortTransaction();
+      }
+
+      throw error;
+
+    } finally {
+
+      if (shouldEndSession) {
+        await session.endSession();
+      }
+
+    }
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | HOLD FOR WITHDRAWAL
+  |--------------------------------------------------------------------------
+  |
+  | Moves `amount` out of spendable `balance` into
+  | `lockedBalance` the moment a withdrawal REQUEST is
+  | created (not when an admin later approves it), so the
+  | user can never spend/bet money they've already asked to
+  | withdraw. Records the "withdraw" ledger transaction here,
+  | since this is the moment real balance actually decreases.
+  */
+
+  async holdForWithdrawal(
+    userId,
+    amount,
+    remark = "",
+    options = {}
+  ) {
+
+    const numericAmount =
+      Number(amount);
+
+    if (
+      !Number.isFinite(numericAmount) ||
+      numericAmount <= 0
+    ) {
+      throw new Error(
+        "Invalid withdrawal amount."
+      );
+    }
+
+    const externalSession =
+      options?.session || null;
+
+    const session =
+      externalSession ||
+      await mongoose.startSession();
+
+    const shouldEndSession =
+      !externalSession;
+
+    try {
+
+      if (shouldEndSession) {
+        session.startTransaction();
+      }
+
+      const wallet =
+        await Wallet.findOne({
+          user: userId,
+        }).session(session);
+
+      if (!wallet) {
+        throw new Error(
+          "Wallet not found"
+        );
+      }
+
+      const previousBalance =
+        Number(wallet.balance || 0);
+
+      if (previousBalance < numericAmount) {
+        throw new Error(
+          "Insufficient Balance"
+        );
+      }
+
+      const currentBalance =
+        previousBalance - numericAmount;
+
+      wallet.balance =
+        currentBalance;
+
+      wallet.lockedBalance =
+        Number(wallet.lockedBalance || 0) +
+        numericAmount;
+
+      wallet.totalWithdraw =
+        Number(wallet.totalWithdraw || 0) +
+        numericAmount;
+
+      await wallet.save({
+        session,
+      });
+
+      const transactionId =
+        generateTransactionId();
+
+      const transaction =
+        await Transaction.create(
+          [
+            {
+              transactionId,
+              user: userId,
+              wallet: wallet._id,
+              type: "withdraw",
+              walletMode: "real",
+              amount: numericAmount,
+              previousBalance,
+              currentBalance,
+              status: "success",
+              remark,
+            },
+          ],
+          { session }
+        );
+
+      if (shouldEndSession) {
+        await session.commitTransaction();
+      }
+
+      return {
+        wallet,
+        transaction: transaction[0],
+        transactionId,
+        previousBalance,
+        currentBalance,
+      };
+
+    } catch (error) {
+
+      if (shouldEndSession) {
+        await session.abortTransaction();
+      }
+
+      throw error;
+
+    } finally {
+
+      if (shouldEndSession) {
+        await session.endSession();
+      }
+
+    }
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | RELEASE WITHDRAWAL HOLD (approved)
+  |--------------------------------------------------------------------------
+  |
+  | The balance was already debited at request time
+  | (holdForWithdrawal); approval just clears the lock.
+  | No new ledger transaction - the "withdraw" transaction
+  | already exists.
+  */
+
+  async releaseWithdrawalHold(
+    userId,
+    amount,
+    options = {}
+  ) {
+
+    const numericAmount =
+      Number(amount);
+
+    const externalSession =
+      options?.session || null;
+
+    const session =
+      externalSession ||
+      await mongoose.startSession();
+
+    const shouldEndSession =
+      !externalSession;
+
+    try {
+
+      if (shouldEndSession) {
+        session.startTransaction();
+      }
+
+      const wallet =
+        await Wallet.findOne({
+          user: userId,
+        }).session(session);
+
+      if (!wallet) {
+        throw new Error(
+          "Wallet not found"
+        );
+      }
+
+      wallet.lockedBalance =
+        Math.max(
+          0,
+          Number(wallet.lockedBalance || 0) -
+          numericAmount
+        );
+
+      await wallet.save({
+        session,
+      });
+
+      if (shouldEndSession) {
+        await session.commitTransaction();
+      }
+
+      return { wallet };
+
+    } catch (error) {
+
+      if (shouldEndSession) {
+        await session.abortTransaction();
+      }
+
+      throw error;
+
+    } finally {
+
+      if (shouldEndSession) {
+        await session.endSession();
+      }
+
+    }
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | REFUND WITHDRAWAL HOLD (rejected)
+  |--------------------------------------------------------------------------
+  |
+  | Reverses holdForWithdrawal: returns the held amount to
+  | spendable balance, releases the lock, and records a
+  | "refund" ledger transaction.
+  */
+
+  async refundWithdrawalHold(
+    userId,
+    amount,
+    remark = "",
+    options = {}
+  ) {
+
+    const numericAmount =
+      Number(amount);
+
+    const externalSession =
+      options?.session || null;
+
+    const session =
+      externalSession ||
+      await mongoose.startSession();
+
+    const shouldEndSession =
+      !externalSession;
+
+    try {
+
+      if (shouldEndSession) {
+        session.startTransaction();
+      }
+
+      const wallet =
+        await Wallet.findOne({
+          user: userId,
+        }).session(session);
+
+      if (!wallet) {
+        throw new Error(
+          "Wallet not found"
+        );
+      }
+
+      const previousBalance =
+        Number(wallet.balance || 0);
+
+      const currentBalance =
+        previousBalance + numericAmount;
+
+      wallet.balance =
+        currentBalance;
+
+      wallet.lockedBalance =
+        Math.max(
+          0,
+          Number(wallet.lockedBalance || 0) -
+          numericAmount
+        );
+
+      wallet.totalWithdraw =
+        Math.max(
+          0,
+          Number(wallet.totalWithdraw || 0) -
+          numericAmount
+        );
+
+      await wallet.save({
+        session,
+      });
+
+      const transactionId =
+        generateTransactionId();
+
+      const transaction =
+        await Transaction.create(
+          [
+            {
+              transactionId,
+              user: userId,
+              wallet: wallet._id,
+              type: "refund",
+              walletMode: "real",
+              amount: numericAmount,
+              previousBalance,
+              currentBalance,
+              status: "success",
+              remark,
+            },
+          ],
+          { session }
+        );
+
+      if (shouldEndSession) {
+        await session.commitTransaction();
+      }
+
+      return {
+        wallet,
+        transaction: transaction[0],
+        transactionId,
+        previousBalance,
+        currentBalance,
+      };
+
+    } catch (error) {
+
+      if (shouldEndSession) {
+        await session.abortTransaction();
+      }
+
+      throw error;
+
+    } finally {
+
+      if (shouldEndSession) {
+        await session.endSession();
+      }
+
+    }
 
   }
 

@@ -47,7 +47,24 @@ const userSchema = new mongoose.Schema(
       default: "active",
     },
 
+    /*
+     * Legacy generic flag - kept so existing reads don't
+     * break, but no longer authoritative for anything new.
+     * Use emailVerified/mobileVerified instead, which are
+     * only ever set by a successful OTP verification
+     * (otpService), never directly by an admin/user request.
+     */
     isVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    mobileVerified: {
       type: Boolean,
       default: false,
     },
@@ -64,10 +81,70 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    /*
+     * Set once the referrer's bonus has been paid out
+     * for this user, so it can never be paid twice.
+     */
+    referralQualified: {
+      type: Boolean,
+      default: false,
+    },
+
+    /*
+     * Soft delete. Financial/audit/bet/referral records
+     * always reference the user by ObjectId and are never
+     * touched by this - only login/access is blocked.
+     */
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+
+    /*
+     * Permanent delete = a strict superset of isDeleted
+     * (login/access is blocked exactly the same way) PLUS the
+     * account's identifying PII has been anonymized in place.
+     * The document itself is never removed - every financial/
+     * bet/transaction/audit/support record keeps referencing
+     * this same _id, so historical data stays fully intact
+     * and correctly attributed; only the account's own name/
+     * email/mobile/username/password become unrecoverable.
+     */
+    isPermanentlyDeleted: {
+      type: Boolean,
+      default: false,
+    },
+
+    permanentlyDeletedAt: {
+      type: Date,
+      default: null,
+    },
+
     lastLogin: {
       type: Date,
       default: null,
-    }
+    },
+
+    /*
+     * Per-user opt-out for email/SMS notification delivery.
+     * In-app notifications are never gated by these - only
+     * whether an email/SMS is additionally sent for them.
+     */
+    notificationPreferences: {
+      email: {
+        type: Boolean,
+        default: true,
+      },
+      sms: {
+        type: Boolean,
+        default: true,
+      },
+    },
   },
   {
     timestamps: true,

@@ -4,6 +4,27 @@ const adminWalletService =
 const walletService =
     require("../services/walletService");
 
+const { createAuditLog } =
+    require("../services/auditLogService");
+
+
+// ======================================================
+// REQUEST CONTEXT (IP / USER AGENT)
+// ======================================================
+
+const getRequestContext = (req) => ({
+
+    ipAddress:
+        req.ip ||
+        req.headers["x-forwarded-for"] ||
+        req.socket?.remoteAddress ||
+        null,
+
+    userAgent:
+        req.headers["user-agent"] || null,
+
+});
+
 
 // ======================================================
 // GET WALLET OVERVIEW
@@ -585,6 +606,40 @@ const adjustUserWallet =
                     );
 
             }
+
+
+            // ==========================================
+            // AUDIT LOG
+            // ==========================================
+
+            await createAuditLog({
+
+                actorType: "admin",
+
+                actorId:
+                    req.admin?._id || null,
+
+                action:
+                    type === "admin_credit"
+                        ? "wallet.admin_credit"
+                        : "wallet.admin_debit",
+
+                module: "wallet",
+
+                key: userId,
+
+                oldValue: result?.previousBalance,
+
+                newValue: result?.currentBalance,
+
+                metadata: {
+                    amount: numericAmount,
+                    remark: cleanRemark,
+                },
+
+                ...getRequestContext(req),
+
+            }).catch(() => {});
 
 
             // ==========================================

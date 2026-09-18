@@ -1,5 +1,41 @@
 const adminGameService = require("../services/adminGameService");
 
+const { createAuditLog } = require("../services/auditLogService");
+
+const notificationService = require("../services/notificationService");
+
+
+// ==========================================
+// REQUEST CONTEXT (IP / USER AGENT)
+// ==========================================
+
+const getRequestContext = (req) => ({
+
+    ipAddress:
+        req.ip ||
+        req.headers["x-forwarded-for"] ||
+        req.socket?.remoteAddress ||
+        null,
+
+    userAgent:
+        req.headers["user-agent"] || null,
+
+});
+
+
+// ==========================================
+// LOG A GAME CONTROL ACTION
+// ==========================================
+
+const logGameAction = (req, action) =>
+    createAuditLog({
+        actorType: "admin",
+        actorId: req.admin?._id || null,
+        action: `game.${action}`,
+        module: "game",
+        ...getRequestContext(req),
+    }).catch(() => {});
+
 
 // ==========================================
 // GET GAME STATUS
@@ -41,6 +77,8 @@ const startGame = async (req, res) => {
                 req.admin
             );
 
+        await logGameAction(req, "start");
+
         return res.status(200).json({
             success: true,
             message:
@@ -74,6 +112,8 @@ const pauseGame = async (req, res) => {
             await adminGameService.pauseGame(
                 req.admin
             );
+
+        await logGameAction(req, "pause");
 
         return res.status(200).json({
             success: true,
@@ -109,6 +149,8 @@ const resumeGame = async (req, res) => {
                 req.admin
             );
 
+        await logGameAction(req, "resume");
+
         return res.status(200).json({
             success: true,
             message:
@@ -142,6 +184,8 @@ const stopGame = async (req, res) => {
             await adminGameService.stopGame(
                 req.admin
             );
+
+        await logGameAction(req, "stop");
 
         return res.status(200).json({
             success: true,
@@ -177,6 +221,17 @@ const emergencyStop = async (req, res) => {
                 req.admin
             );
 
+        await logGameAction(req, "emergency_stop");
+
+        notificationService
+            .notifyAdmins(
+                "system",
+                "Emergency stop activated",
+                `Emergency stop was activated by ${req.admin?.name || req.admin?.username || "an admin"}.`,
+                { adminId: String(req.admin?._id || "") }
+            )
+            .catch(() => {});
+
         return res.status(200).json({
             success: true,
             message:
@@ -211,6 +266,8 @@ const startNewRound = async (req, res) => {
                 req.admin
             );
 
+        await logGameAction(req, "new_round");
+
         return res.status(200).json({
             success: true,
             message:
@@ -244,6 +301,8 @@ const voidCurrentRound = async (req, res) => {
             await adminGameService.voidCurrentRound(
                 req.admin
             );
+
+        await logGameAction(req, "void_round");
 
         return res.status(200).json({
             success: true,

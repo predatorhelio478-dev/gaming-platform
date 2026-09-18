@@ -1,44 +1,139 @@
-const GameRound = require("../../models/GameRound");
+const GameRound =
+    require("../../models/GameRound");
+
+const settingsService =
+    require("../../services/settingsService");
+
+
+// ==========================================================
+// CREATE NEW ROUND
+// ==========================================================
 
 const createRound = async () => {
 
+    // ======================================================
+    // CLOSE OLD ACTIVE ROUNDS
+    // ======================================================
+
     await GameRound.updateMany(
+
         {
             status: {
-                $ne: "completed"
-            }
+                $nin: [
+                    "completed",
+                    "void",
+                ],
+            },
         },
+
         {
-            status: "completed"
+            $set: {
+                status: "completed",
+            },
         }
+
     );
 
-    const lastRound = await GameRound
-        .findOne()
-        .sort({ roundNumber: -1 });
 
-    const roundNumber = lastRound
-        ? lastRound.roundNumber + 1
-        : 1001;
+    // ======================================================
+    // GET LAST ROUND
+    // ======================================================
 
-    const startTime = new Date();
+    const lastRound =
+        await GameRound
+            .findOne()
+            .sort({
+                roundNumber: -1,
+            });
 
-    const endTime = new Date(
-        startTime.getTime() + 30000
-    );
 
-    return await GameRound.create({
+    const roundNumber =
+        lastRound
+            ? lastRound.roundNumber + 1
+            : 1001;
 
-        roundNumber,
 
-        startTime,
+    // ======================================================
+    // GET ROUND DURATION FROM SETTINGS
+    // ======================================================
 
-        endTime,
+    const configuredDuration =
+        await settingsService.getValue(
+            "game",
+            "round_duration",
+            60
+        );
 
-        status: "betting"
 
-    });
+    const roundDuration =
+        Number(
+            configuredDuration
+        );
+
+
+    // ======================================================
+    // VALIDATE ROUND DURATION
+    // ======================================================
+
+    if (
+        !Number.isFinite(
+            roundDuration
+        ) ||
+        roundDuration <= 0
+    ) {
+
+        throw new Error(
+            "Invalid game round duration configured."
+        );
+
+    }
+
+
+    // ======================================================
+    // ROUND TIME
+    // ======================================================
+
+    const startTime =
+        new Date();
+
+
+    const endTime =
+        new Date(
+            startTime.getTime() +
+            (
+                roundDuration *
+                1000
+            )
+        );
+
+
+    // ======================================================
+    // CREATE ROUND
+    // ======================================================
+
+    const round =
+        await GameRound.create({
+
+            roundNumber,
+
+            startTime,
+
+            endTime,
+
+            status:
+                "betting",
+
+        });
+
+
+    return round;
 
 };
 
-module.exports = createRound;
+
+// ==========================================================
+// EXPORT
+// ==========================================================
+
+module.exports =
+    createRound;

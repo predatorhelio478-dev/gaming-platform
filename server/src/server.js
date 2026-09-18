@@ -14,6 +14,9 @@ const {
     initializeSocket,
 } = require("./socket/socket");
 
+const emailService =
+    require("./services/emailService");
+
 
 /*
  * ==========================================
@@ -52,6 +55,45 @@ initializeSocket(
  */
 
 gameEngine.startGameEngine();
+
+
+/*
+ * ==========================================
+ * EMAIL (SMTP) - non-blocking startup check
+ * ==========================================
+ *
+ * Never delays or fails server startup - just gives an
+ * immediate, clear signal in the logs about which of the
+ * three real states email is in, instead of only finding out
+ * on the first OTP/notification send.
+ */
+
+emailService.verifySmtpConnection()
+    .then((result) => {
+
+        if (result.ok) {
+
+            console.log(
+                "[emailService] SMTP connection verified - real emails will be sent."
+            );
+
+        } else if (result.reason === "SMTP not configured") {
+
+            console.warn(
+                "[emailService] SMTP not configured (SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS) - OTP/notification emails will use the dev-only console fallback."
+            );
+
+        } else {
+
+            console.error(
+                "[emailService] SMTP is configured but the connection/authentication check failed:",
+                result.reason
+            );
+
+        }
+
+    })
+    .catch(() => {});
 
 
 /*

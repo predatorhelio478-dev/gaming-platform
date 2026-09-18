@@ -1,5 +1,62 @@
+const jwt =
+    require("jsonwebtoken");
+
+const Admin =
+    require("../models/Admin");
+
 const gameEngine =
     require("../game/engine/gameEngine");
+
+
+/*
+ * ==========================================
+ * VERIFY ADMIN SOCKET TOKEN
+ * ==========================================
+ */
+
+const verifyAdminSocket = async (socket) => {
+
+    const token =
+        socket.handshake?.auth?.adminToken;
+
+    if (!token) {
+
+        return null;
+
+    }
+
+    try {
+
+        const decoded = jwt.verify(
+            token,
+            process.env.JWT_SECRET
+        );
+
+        if (decoded.type !== "admin") {
+
+            return null;
+
+        }
+
+        const admin = await Admin.findById(
+            decoded.adminId
+        );
+
+        if (!admin || !admin.isActive) {
+
+            return null;
+
+        }
+
+        return admin;
+
+    } catch (error) {
+
+        return null;
+
+    }
+
+};
 
 
 /*
@@ -19,7 +76,28 @@ const registerGameSocket = (
  * ==========================================
  */
 
-    socket.on("join_admin_game_monitor", () => {
+    socket.on("join_admin_game_monitor", async () => {
+
+        const admin =
+            await verifyAdminSocket(socket);
+
+        if (!admin) {
+
+            socket.emit(
+                "admin_game_monitor_error",
+                {
+                    message:
+                        "Admin authorization required.",
+                }
+            );
+
+            console.warn(
+                `Rejected unauthorized join_admin_game_monitor from ${socket.id}`
+            );
+
+            return;
+
+        }
 
         socket.join("admin_game_monitor");
 

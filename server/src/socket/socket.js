@@ -1,5 +1,7 @@
 const { Server } = require("socket.io");
 
+const { getClientUrl } = require("../config/clientUrl");
+
 let io = null;
 
 
@@ -13,9 +15,28 @@ const initializeSocket = (server) => {
 
     io = new Server(server, {
         cors: {
-            origin:
-                process.env.CLIENT_URL ||
-                "http://localhost:3000",
+            // Resolved per-connection (not once at boot) so an
+            // admin-updated Settings -> General -> Frontend URL
+            // takes effect immediately, with no restart.
+            origin: async (origin, callback) => {
+
+                try {
+
+                    const clientUrl = await getClientUrl();
+
+                    callback(null, clientUrl);
+
+                } catch (error) {
+
+                    callback(
+                        null,
+                        process.env.CLIENT_URL ||
+                        "http://localhost:3000"
+                    );
+
+                }
+
+            },
 
             methods: [
                 "GET",
@@ -35,6 +56,9 @@ const initializeSocket = (server) => {
 
     const registerGameSocket =
         require("./gameSocket");
+
+    const registerNotificationSocket =
+        require("./notificationSocket");
 
 
     /*
@@ -59,6 +83,11 @@ const initializeSocket = (server) => {
              */
 
             registerGameSocket(
+                io,
+                socket
+            );
+
+            registerNotificationSocket(
                 io,
                 socket
             );

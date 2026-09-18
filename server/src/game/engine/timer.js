@@ -1,4 +1,4 @@
-let countdown = 30;
+let countdown = 0;
 
 let timer = null;
 
@@ -7,15 +7,104 @@ let isPaused = false;
 let finishCallback = null;
 
 
-// ==========================================
+// ==========================================================
+// SOCKET HELPER
+// ==========================================================
+
+const broadcastTimer = () => {
+
+    try {
+
+        const {
+            getIO,
+        } = require("../../socket/socket");
+
+
+        const io =
+            getIO();
+
+
+        const timerData = {
+
+            remainingSeconds:
+                Math.max(
+                    countdown,
+                    0
+                ),
+
+        };
+
+
+        // ==============================================
+        // PLAYER ROOM
+        // ==============================================
+
+        io.to(
+            "color_prediction"
+        ).emit(
+            "timer",
+            timerData
+        );
+
+
+        // ==============================================
+        // ADMIN ROOM
+        // ==============================================
+
+        io.to(
+            "admin_game_monitor"
+        ).emit(
+            "timer",
+            timerData
+        );
+
+
+    } catch (error) {
+
+        /*
+         * Socket failure must never
+         * stop the timer.
+         */
+
+    }
+
+};
+
+
+// ==========================================================
 // START TIMER
-// ==========================================
+// ==========================================================
 
-const startTimer = (onFinish) => {
+const startTimer = (
+    durationSeconds,
+    onFinish
+) => {
 
-    /*
-     * Clear previous timer
-     */
+    // ======================================================
+    // VALIDATE DURATION
+    // ======================================================
+
+    const duration =
+        Number(
+            durationSeconds
+        );
+
+
+    if (
+        !Number.isFinite(duration) ||
+        duration <= 0
+    ) {
+
+        throw new Error(
+            "Invalid timer duration."
+        );
+
+    }
+
+
+    // ======================================================
+    // CLEAR PREVIOUS TIMER
+    // ======================================================
 
     if (timer) {
 
@@ -26,117 +115,131 @@ const startTimer = (onFinish) => {
     }
 
 
-    countdown = 30;
+    // ======================================================
+    // INITIALIZE
+    // ======================================================
 
-    isPaused = false;
-
-    finishCallback = onFinish;
-
-
-    timer = setInterval(() => {
-
-        if (isPaused) {
-            return;
-        }
-
-
-        countdown--;
-
-
-        console.log(
-            `Remaining : ${countdown}`
+    countdown =
+        Math.ceil(
+            duration
         );
 
 
-        /*
-         * Send timer to players
-         */
+    isPaused = false;
 
-        try {
-
-            const {
-                getIO,
-            } = require("../../socket/socket");
+    finishCallback =
+        onFinish;
 
 
-            const io = getIO();
+    // Immediately broadcast initial value
+
+    broadcastTimer();
 
 
-            /*
-             * Player room
-             */
+    // ======================================================
+    // START INTERVAL
+    // ======================================================
 
-            io.to(
-                "color_prediction"
-            ).emit(
-                "timer",
-                {
-                    remainingSeconds:
-                        countdown,
-                }
-            );
+    timer =
+        setInterval(() => {
 
+            // ==============================================
+            // PAUSED
+            // ==============================================
 
-            /*
-             * Admin room
-             */
+            if (isPaused) {
 
-            io.to(
-                "admin_game_monitor"
-            ).emit(
-                "timer",
-                {
-                    remainingSeconds:
-                        countdown,
-                }
-            );
-
-        } catch (error) {
-
-            /*
-             * Socket should never
-             * stop the game.
-             */
-
-        }
-
-
-        /*
-         * Timer finished
-         */
-
-        if (countdown <= 0) {
-
-            clearInterval(timer);
-
-            timer = null;
-
-            isPaused = false;
-
-
-            const callback =
-                finishCallback;
-
-
-            finishCallback = null;
-
-
-            if (callback) {
-
-                callback();
+                return;
 
             }
 
-        }
 
-    }, 1000);
+            // ==============================================
+            // DECREMENT
+            // ==============================================
+
+            countdown -= 1;
+
+
+            countdown =
+                Math.max(
+                    countdown,
+                    0
+                );
+
+
+            console.log(
+                `Remaining : ${countdown}`
+            );
+
+
+            // ==============================================
+            // BROADCAST
+            // ==============================================
+
+            broadcastTimer();
+
+
+            // ==============================================
+            // TIMER FINISHED
+            // ==============================================
+
+            if (
+                countdown <= 0
+            ) {
+
+                clearInterval(
+                    timer
+                );
+
+                timer = null;
+
+                isPaused = false;
+
+
+                const callback =
+                    finishCallback;
+
+
+                finishCallback =
+                    null;
+
+
+                if (callback) {
+
+                    /*
+                     * Support both async and
+                     * normal callbacks.
+                     */
+
+                    Promise
+                        .resolve(
+                            callback()
+                        )
+                        .catch(
+                            (error) => {
+
+                                console.error(
+                                    "Timer Finish Callback Error:",
+                                    error.message
+                                );
+
+                            }
+                        );
+
+                }
+
+            }
+
+        }, 1000);
+
 
 };
 
 
-// ==========================================
+// ==========================================================
 // PAUSE TIMER
-// ==========================================
+// ==========================================================
 
 const pauseTimer = () => {
 
@@ -162,18 +265,26 @@ const pauseTimer = () => {
         } = require("../../socket/socket");
 
 
-        const io = getIO();
+        const io =
+            getIO();
+
+
+        const data = {
+
+            status:
+                "paused",
+
+            remainingSeconds:
+                countdown,
+
+        };
 
 
         io.to(
             "color_prediction"
         ).emit(
             "game_status",
-            {
-                status: "paused",
-                remainingSeconds:
-                    countdown,
-            }
+            data
         );
 
 
@@ -181,12 +292,9 @@ const pauseTimer = () => {
             "admin_game_monitor"
         ).emit(
             "game_status",
-            {
-                status: "paused",
-                remainingSeconds:
-                    countdown,
-            }
+            data
         );
+
 
     } catch (error) {
 
@@ -203,9 +311,9 @@ const pauseTimer = () => {
 };
 
 
-// ==========================================
+// ==========================================================
 // RESUME TIMER
-// ==========================================
+// ==========================================================
 
 const resumeTimer = () => {
 
@@ -215,13 +323,16 @@ const resumeTimer = () => {
 
     }
 
+
     if (!isPaused) {
 
         return true;
 
     }
 
+
     isPaused = false;
+
 
     console.log(
         `Timer Resumed at ${countdown}`
@@ -234,19 +345,27 @@ const resumeTimer = () => {
             getIO,
         } = require("../../socket/socket");
 
-        const io = getIO();
+
+        const io =
+            getIO();
+
+
+        const data = {
+
+            status:
+                "running",
+
+            remainingSeconds:
+                countdown,
+
+        };
 
 
         io.to(
             "color_prediction"
         ).emit(
             "game_status",
-            {
-                status: "running",
-
-                remainingSeconds:
-                    countdown,
-            }
+            data
         );
 
 
@@ -254,13 +373,9 @@ const resumeTimer = () => {
             "admin_game_monitor"
         ).emit(
             "game_status",
-            {
-                status: "running",
-
-                remainingSeconds:
-                    countdown,
-            }
+            data
         );
+
 
     } catch (error) {
 
@@ -277,15 +392,17 @@ const resumeTimer = () => {
 };
 
 
-// ==========================================
+// ==========================================================
 // STOP TIMER
-// ==========================================
+// ==========================================================
 
 const stopTimer = () => {
 
     if (timer) {
 
-        clearInterval(timer);
+        clearInterval(
+            timer
+        );
 
         timer = null;
 
@@ -309,18 +426,26 @@ const stopTimer = () => {
         } = require("../../socket/socket");
 
 
-        const io = getIO();
+        const io =
+            getIO();
+
+
+        const data = {
+
+            status:
+                "stopped",
+
+            remainingSeconds:
+                countdown,
+
+        };
 
 
         io.to(
             "color_prediction"
         ).emit(
             "game_status",
-            {
-                status: "stopped",
-                remainingSeconds:
-                    countdown,
-            }
+            data
         );
 
 
@@ -328,12 +453,9 @@ const stopTimer = () => {
             "admin_game_monitor"
         ).emit(
             "game_status",
-            {
-                status: "stopped",
-                remainingSeconds:
-                    countdown,
-            }
+            data
         );
+
 
     } catch (error) {
 
@@ -350,9 +472,9 @@ const stopTimer = () => {
 };
 
 
-// ==========================================
+// ==========================================================
 // GET COUNTDOWN
-// ==========================================
+// ==========================================================
 
 const getCountdown = () => {
 
@@ -361,9 +483,9 @@ const getCountdown = () => {
 };
 
 
-// ==========================================
-// CHECK PAUSED
-// ==========================================
+// ==========================================================
+// GET PAUSED
+// ==========================================================
 
 const getPaused = () => {
 
@@ -372,16 +494,22 @@ const getPaused = () => {
 };
 
 
-// ==========================================
+// ==========================================================
 // CHECK RUNNING
-// ==========================================
+// ==========================================================
 
 const isRunning = () => {
 
-    return Boolean(timer);
+    return Boolean(
+        timer
+    );
 
 };
 
+
+// ==========================================================
+// EXPORT
+// ==========================================================
 
 module.exports = {
 

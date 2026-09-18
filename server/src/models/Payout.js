@@ -46,6 +46,21 @@ const payoutSchema = new mongoose.Schema(
             min: 0,
         },
 
+        /*
+         * Mirrors the funding bet's walletMode so this
+         * payout is credited back into the same pool it
+         * was staked from.
+         */
+        walletMode: {
+            type: String,
+            enum: [
+                "real",
+                "test",
+                "bonus",
+            ],
+            default: "real",
+        },
+
         status: {
             type: String,
             enum: [

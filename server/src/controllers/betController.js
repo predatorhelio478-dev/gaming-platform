@@ -41,6 +41,7 @@ const placeBet = async (req, res) => {
         const {
             color,
             amount,
+            mode,
         } = req.body;
 
 
@@ -86,7 +87,8 @@ const placeBet = async (req, res) => {
             await betService.placeBet(
                 userId,
                 color,
-                Number(amount)
+                Number(amount),
+                mode || "real"
             );
 
 
@@ -108,6 +110,109 @@ const placeBet = async (req, res) => {
 
         console.error(
             "Place Bet Controller Error:",
+            error.message
+        );
+
+
+        return res.status(400).json({
+
+            success: false,
+
+            message: error.message,
+
+        });
+
+    }
+
+};
+
+
+/*
+ * ==========================================
+ * INCREASE BET
+ * ==========================================
+ */
+
+const increaseBet = async (req, res) => {
+
+    try {
+
+        const userId =
+            req.user?.id ||
+            req.user?._id;
+
+
+        if (!userId) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Unauthorized",
+
+            });
+
+        }
+
+
+        const {
+            color,
+            amount,
+        } = req.body;
+
+
+        if (!color) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message: "Color is required",
+
+            });
+
+        }
+
+
+        if (
+            amount === undefined ||
+            amount === null ||
+            amount === ""
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message: "Increase amount is required",
+
+            });
+
+        }
+
+
+        const bet =
+            await betService.increaseBet(
+                userId,
+                color,
+                Number(amount)
+            );
+
+
+        return res.status(200).json({
+
+            success: true,
+
+            message: "Bet increased successfully",
+
+            bet,
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Increase Bet Controller Error:",
             error.message
         );
 
@@ -158,32 +263,18 @@ const getMyBets = async (req, res) => {
 
 
         /*
-         * Optional limit.
+         * Optional page/limit/filters.
          *
          * Example:
-         * /api/bets/history?limit=20
+         * /api/bets/history?page=1&limit=20&color=red&result=won&search=90123&dateFrom=2026-01-01&dateTo=2026-01-31
          */
 
-        const limit =
-            Number(req.query.limit) || 20;
+        const { page, limit, color, result: resultFilter, search, dateFrom, dateTo } = req.query;
 
-
-        /*
-         * Prevent excessively large requests.
-         */
-
-        const safeLimit =
-            Math.min(Math.max(limit, 1), 100);
-
-
-        /*
-         * Get user's bets.
-         */
-
-        const bets =
+        const result =
             await betService.getUserBets(
                 userId,
-                safeLimit
+                { page, limit, color, result: resultFilter, search, dateFrom, dateTo }
             );
 
 
@@ -191,9 +282,15 @@ const getMyBets = async (req, res) => {
 
             success: true,
 
-            count: bets.length,
+            count: result.bets.length,
 
-            bets,
+            bets: result.bets,
+
+            total: result.total,
+
+            page: result.page,
+
+            totalPages: result.totalPages,
 
         });
 
@@ -221,6 +318,8 @@ const getMyBets = async (req, res) => {
 module.exports = {
 
     placeBet,
+
+    increaseBet,
 
     getMyBets,
 

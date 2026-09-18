@@ -1,6 +1,27 @@
 const adminPayoutService =
     require("../services/adminPayoutService");
 
+const { createAuditLog } =
+    require("../services/auditLogService");
+
+
+// ==========================================
+// REQUEST CONTEXT (IP / USER AGENT)
+// ==========================================
+
+const getRequestContext = (req) => ({
+
+    ipAddress:
+        req.ip ||
+        req.headers["x-forwarded-for"] ||
+        req.socket?.remoteAddress ||
+        null,
+
+    userAgent:
+        req.headers["user-agent"] || null,
+
+});
+
 
 // ==========================================
 // GET ADMIN PAYOUTS
@@ -94,6 +115,20 @@ const retryPayout = async (
             );
 
 
+        if (!payout.alreadyPaid) {
+
+            await createAuditLog({
+                actorType: "admin",
+                actorId: req.admin?._id || null,
+                action: "payout.retry",
+                module: "payouts",
+                key: id,
+                ...getRequestContext(req),
+            }).catch(() => {});
+
+        }
+
+
         return res.status(200).json({
 
             success: true,
@@ -160,6 +195,17 @@ const markManualReview = async (
             );
 
 
+        await createAuditLog({
+            actorType: "admin",
+            actorId: req.admin?._id || null,
+            action: "payout.manual_review",
+            module: "payouts",
+            key: id,
+            metadata: { reason },
+            ...getRequestContext(req),
+        }).catch(() => {});
+
+
         return res.status(200).json({
 
             success: true,
@@ -222,6 +268,17 @@ const cancelPayout = async (
                 reason,
                 req.admin?._id
             );
+
+
+        await createAuditLog({
+            actorType: "admin",
+            actorId: req.admin?._id || null,
+            action: "payout.cancel",
+            module: "payouts",
+            key: id,
+            metadata: { reason },
+            ...getRequestContext(req),
+        }).catch(() => {});
 
 
         return res.status(200).json({
@@ -309,6 +366,21 @@ const reversePayout = async (
                 reason,
                 req.admin?._id
             );
+
+
+        if (!payout.alreadyReversed) {
+
+            await createAuditLog({
+                actorType: "admin",
+                actorId: req.admin?._id || null,
+                action: "payout.reverse",
+                module: "payouts",
+                key: id,
+                metadata: { reason },
+                ...getRequestContext(req),
+            }).catch(() => {});
+
+        }
 
 
         return res.status(200).json({
@@ -419,6 +491,22 @@ const refundPayout = async (
             );
 
 
+        if (!result.alreadyRefunded) {
+
+            await createAuditLog({
+                actorType: "admin",
+                actorId: req.admin?._id || null,
+                action: "payout.refund",
+                module: "payouts",
+                key: id,
+                newValue: Number(amount),
+                metadata: { reason: reason.trim() },
+                ...getRequestContext(req),
+            }).catch(() => {});
+
+        }
+
+
         return res.status(200).json({
 
             success: true,
@@ -506,6 +594,21 @@ const restorePayout = async (
                 reason.trim(),
                 req.admin?._id
             );
+
+
+        if (!result.alreadyRestored) {
+
+            await createAuditLog({
+                actorType: "admin",
+                actorId: req.admin?._id || null,
+                action: "payout.restore",
+                module: "payouts",
+                key: id,
+                metadata: { reason: reason.trim() },
+                ...getRequestContext(req),
+            }).catch(() => {});
+
+        }
 
 
         return res.status(200).json({
