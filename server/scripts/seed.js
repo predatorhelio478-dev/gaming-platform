@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config({ quiet: true });
 
 const mongoose = require("mongoose");
 
@@ -12,7 +12,11 @@ const seedAdmin = require("../src/seeders/adminSeeder");
  * PRODUCTION SEED
  * ==========================================
  *
- * Run once after deployment:
+ * Runs automatically on every deploy, as part of the "build"
+ * step (see package.json "build" - Hostinger's Node.js
+ * pipeline runs install -> build -> start, and there is no SSH
+ * access to run npm commands by hand there). Also runnable
+ * directly:
  *
  *   npm run seed
  *
@@ -25,16 +29,38 @@ const seedAdmin = require("../src/seeders/adminSeeder");
  *   - Admin: only creates an admin if ADMIN_EMAIL/ADMIN_PASSWORD
  *     are set in the environment and no admin already exists.
  *
- * Does not connect the game engine, socket.io or SMTP checks -
+ * Does not start the game engine, Socket.IO or the SMTP check -
  * this only opens a DB connection long enough to seed, then
- * disconnects.
+ * disconnects. Those only start from src/server.js, which this
+ * script never requires.
+ *
+ * Never fails the build: some hosts only inject runtime env
+ * vars at the "start" phase (no MONGO_URI yet at build time),
+ * and with no SSH access there is no way to manually re-run a
+ * failed step. A missing/unreachable database is logged and
+ * skipped rather than treated as fatal - the idempotent seed
+ * simply catches up on the next deploy once connectivity/env
+ * vars are correct.
  */
 
 const run = async () => {
 
+    if (!process.env.MONGO_URI) {
+
+        console.log(
+            "Seed skipped - MONGO_URI not set at this deploy phase."
+        );
+
+        return;
+
+    }
+
     try {
 
-        await mongoose.connect(process.env.MONGO_URI);
+        await mongoose.connect(
+            process.env.MONGO_URI,
+            { serverSelectionTimeoutMS: 8000 }
+        );
 
         console.log("Connected to MongoDB.");
 
@@ -47,13 +73,14 @@ const run = async () => {
 
     } catch (error) {
 
-        console.error("Seed failed:", error.message);
-
-        process.exitCode = 1;
+        console.error(
+            "Seed failed (non-fatal - will retry on next deploy):",
+            error.message
+        );
 
     } finally {
 
-        await mongoose.disconnect();
+        await mongoose.disconnect().catch(() => {});
 
     }
 

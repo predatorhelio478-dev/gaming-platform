@@ -1,3 +1,6 @@
+const mongoose =
+    require("mongoose");
+
 const createRound =
     require("./roundManager");
 
@@ -392,6 +395,270 @@ const getColorTotals = async (
 
 
 // ==========================================
+// FINALIZE ROUND SETTLEMENT
+// ==========================================
+//
+// Shared tail of a round's lifecycle: pay out every bet,
+// mark the round completed, record history, notify clients.
+// Used both by the normal timer-driven processRound() below
+// AND by recoverOrphanedRound() when a round's result was
+// already durably saved before a crash - payoutService is
+// idempotent (safe to call again on an already-partially-paid
+// round: it synchronizes already-paid bets instead of paying
+// them twice), so resuming here after an interruption is safe.
+// ==========================================
+
+const finalizeRoundSettlement = async (
+    round,
+    result
+) => {
+
+    const payoutResult =
+        await payoutManager.processPayout(
+            round._id,
+            result
+        );
+
+    round.status =
+        "completed";
+
+    await round.save();
+
+
+    /*
+     * GameHistory has no unique constraint on roundNumber, so
+     * guard against a duplicate entry in the (normally
+     * unreachable, since this only runs for rounds not yet
+     * "completed") case where this exact round's history was
+     * somehow already recorded.
+     */
+
+    const alreadyRecorded =
+        await GameHistory.findOne({
+            roundNumber: round.roundNumber,
+        });
+
+    if (!alreadyRecorded) {
+
+        await GameHistory.create({
+
+            roundNumber:
+                round.roundNumber,
+
+            result,
+
+            totalPlayers:
+                round.totalBets,
+
+            totalBetAmount:
+                round.totalAmount,
+
+            totalPayout:
+                payoutResult.totalPayout,
+
+        });
+
+    }
+
+
+    console.log(
+        `Round ${round.roundNumber} Completed`
+    );
+
+    console.log(
+        `Total Bets: ${payoutResult.totalBets}`
+    );
+
+    console.log(
+        `Winning Bets: ${payoutResult.winningBets}`
+    );
+
+    console.log(
+        `Total Payout: ${payoutResult.totalPayout}`
+    );
+
+
+    /*
+     * Send result to players + admin
+     */
+
+    try {
+
+        const io = getIO();
+
+
+        const resultData = {
+
+            roundNumber:
+                round.roundNumber,
+
+            result,
+
+            totalBets:
+                payoutResult.totalBets,
+
+            winningBets:
+                payoutResult.winningBets,
+
+            totalPayout:
+                payoutResult.totalPayout,
+
+        };
+
+
+        io.to(
+            "color_prediction"
+        ).emit(
+            "round_result",
+            resultData
+        );
+
+
+        io.to(
+            "admin_game_monitor"
+        ).emit(
+            "round_result",
+            resultData
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Socket Result Error:",
+            error.message
+        );
+
+    }
+
+
+    return payoutResult;
+
+};
+
+
+// ==========================================
+// REFUND ALL PENDING BETS FOR A ROUND
+// ==========================================
+//
+// Used when a round is cancelled/voided before a valid result
+// was ever officially finalized (persisted). Refunds every
+// still-"pending" bet's stake back to whichever wallet pool it
+// was staked from, exactly once - each bet is refunded inside
+// its own transaction that atomically (a) compare-and-swaps the
+// bet from "pending" to "voided" and (b) credits the wallet, so
+// the two can never diverge. If this function (or the whole
+// process) is interrupted and re-run later, any bet already
+// flipped to "voided" is simply skipped by the query below -
+// there is no window where a bet can be credited twice, and no
+// window where it can be marked "voided" without being credited
+// (both happen in one committed transaction, or neither does).
+// ==========================================
+
+const refundRoundBets = async (
+    round
+) => {
+
+    const pendingBets =
+        await Bet.find({
+            round: round._id,
+            result: "pending",
+        });
+
+    for (const bet of pendingBets) {
+
+        const session =
+            await mongoose.startSession();
+
+        try {
+
+            session.startTransaction();
+
+            const claimedBet =
+                await Bet.findOneAndUpdate(
+                    {
+                        _id: bet._id,
+                        round: round._id,
+                        result: "pending",
+                    },
+                    {
+                        result: "voided",
+                    },
+                    {
+                        session,
+                        new: true,
+                    }
+                );
+
+            if (!claimedBet) {
+
+                /*
+                 * Already refunded by a previous pass - nothing
+                 * left to do for this bet.
+                 */
+
+                await session.abortTransaction();
+
+                continue;
+
+            }
+
+            const remark =
+                `Refund - Round ${round.roundNumber} cancelled (no result finalized)`;
+
+            if (claimedBet.walletMode === "real") {
+
+                await walletService.credit(
+                    claimedBet.user,
+                    claimedBet.amount,
+                    "refund",
+                    remark,
+                    { session }
+                );
+
+            } else {
+
+                await walletService.creditPool(
+                    claimedBet.user,
+                    claimedBet.amount,
+                    "refund",
+                    remark,
+                    claimedBet.walletMode === "test"
+                        ? "testBalance"
+                        : "bonusBalance",
+                    { session }
+                );
+
+            }
+
+            await session.commitTransaction();
+
+        } catch (error) {
+
+            if (session.inTransaction()) {
+
+                await session.abortTransaction();
+
+            }
+
+            console.error(
+                `Refund Error for bet ${bet._id}:`,
+                error.message
+            );
+
+        } finally {
+
+            await session.endSession();
+
+        }
+
+    }
+
+    return pendingBets.length;
+
+};
+
+
+// ==========================================
 // PROCESS ROUND
 // ==========================================
 
@@ -554,126 +821,28 @@ const processRound = async () => {
 
 
         /*
-         * Save result
+         * Persist the result immediately - this is the durable
+         * "officially finalized" checkpoint crash-recovery keys
+         * off of (see recoverOrphanedRound below). Anything that
+         * happens after this save can be safely resumed rather
+         * than refunded if the process is interrupted.
          */
 
         currentRound.result =
             result;
 
-
-        /*
-         * Process payouts
-         */
-
-        const payoutResult =
-            await payoutManager.processPayout(
-                currentRound._id,
-                result
-            );
-
-
-        /*
-         * Complete round
-         */
-
-        currentRound.status =
-            "completed";
-
-
         await currentRound.save();
 
 
         /*
-         * Save history
+         * Process payouts, complete the round, record history,
+         * notify clients.
          */
 
-        await GameHistory.create({
-
-            roundNumber:
-                currentRound.roundNumber,
-
-            result,
-
-            totalPlayers:
-                currentRound.totalBets,
-
-            totalBetAmount:
-                currentRound.totalAmount,
-
-            totalPayout:
-                payoutResult.totalPayout,
-
-        });
-
-
-        console.log(
-            `Round ${currentRound.roundNumber} Completed`
+        await finalizeRoundSettlement(
+            currentRound,
+            result
         );
-
-        console.log(
-            `Total Bets: ${payoutResult.totalBets}`
-        );
-
-        console.log(
-            `Winning Bets: ${payoutResult.winningBets}`
-        );
-
-        console.log(
-            `Total Payout: ${payoutResult.totalPayout}`
-        );
-
-
-        /*
-         * Send result to players + admin
-         */
-
-        try {
-
-            const io = getIO();
-
-
-            const resultData = {
-
-                roundNumber:
-                    currentRound.roundNumber,
-
-                result,
-
-                totalBets:
-                    payoutResult.totalBets,
-
-                winningBets:
-                    payoutResult.winningBets,
-
-                totalPayout:
-                    payoutResult.totalPayout,
-
-            };
-
-
-            io.to(
-                "color_prediction"
-            ).emit(
-                "round_result",
-                resultData
-            );
-
-
-            io.to(
-                "admin_game_monitor"
-            ).emit(
-                "round_result",
-                resultData
-            );
-
-        } catch (error) {
-
-            console.error(
-                "Socket Result Error:",
-                error.message
-            );
-
-        }
 
 
         isProcessingRound = false;
@@ -718,18 +887,44 @@ const processRound = async () => {
 
 
 // ==========================================
-// START GAME
-// ==========================================
-
-// ==========================================
 // RECOVER ORPHANED ROUND
 // ==========================================
 //
-// If the process crashed/restarted mid-round, a GameRound
-// can be left in "betting"/"locked" with no engine watching
-// it. Safely void it and refund every pending bet placed in
-// it (to whichever wallet pool it was staked from) rather
-// than silently orphaning that money.
+// Runs on every startGame() call - both on every server boot
+// AND whenever an admin resumes after stopping the game - so a
+// GameRound left in "betting"/"locked" with no engine watching
+// it (from a crash, a deploy restart, or an admin stop) is
+// always safely resolved before any new round is started.
+// MongoDB (the GameRound doc's persisted status/result/endTime)
+// is the sole source of truth here - nothing about a round's
+// fate is inferred from in-memory state that a restart would
+// have already wiped.
+//
+// Three cases, decided purely from what is durably persisted:
+//
+//   1) Still genuinely within its original betting window
+//      (status "betting", endTime still in the future) - a
+//      restart mid-round is not a failure. Resume this exact
+//      round in place with the remaining time on its timer;
+//      no bets are touched, nothing is refunded.
+//
+//   2) A result was already durably saved before the
+//      interruption (see the early currentRound.save() in
+//      processRound) - the round WAS officially finalized in
+//      the sense that matters (betting closed, outcome
+//      decided). Resume settlement exactly like a normal
+//      completion. payoutService is idempotent, so any bets
+//      already paid before the crash are safely skipped, never
+//      double-paid.
+//
+//   3) Betting closed (by the timer or an admin action) and no
+//      result was ever persisted - this round did not reach a
+//      valid, officially finalized outcome. Refund every
+//      pending bet's stake exactly once (see refundRoundBets)
+//      and void the round.
+//
+// Returns true if an existing round is still active and the
+// caller should NOT start a new one; false otherwise.
 // ==========================================
 
 const recoverOrphanedRound = async () => {
@@ -747,67 +942,92 @@ const recoverOrphanedRound = async () => {
 
         if (!orphanedRound) {
 
-            return;
+            return false;
 
         }
 
-        console.warn(
-            `Recovering orphaned round #${orphanedRound.roundNumber} left in "${orphanedRound.status}" from before restart.`
-        );
+        const now =
+            Date.now();
 
-        const pendingBets =
-            await Bet.find({
-                round: orphanedRound._id,
-                result: "pending",
-            });
 
-        for (const bet of pendingBets) {
+        /*
+         * Case 2: a result was already durably persisted.
+         */
 
-            try {
+        if (orphanedRound.result) {
 
-                const remark =
-                    `Refund - Round ${orphanedRound.roundNumber} voided on server restart`;
+            console.warn(
+                `Recovering round #${orphanedRound.roundNumber} - result already finalized (${orphanedRound.result}), resuming settlement.`
+            );
 
-                if (bet.walletMode === "real") {
+            await finalizeRoundSettlement(
+                orphanedRound,
+                orphanedRound.result
+            );
 
-                    await walletService.credit(
-                        bet.user,
-                        bet.amount,
-                        "refund",
-                        remark
-                    );
+            return false;
 
-                } else {
+        }
 
-                    await walletService.creditPool(
-                        bet.user,
-                        bet.amount,
-                        "refund",
-                        remark,
-                        bet.walletMode === "test"
-                            ? "testBalance"
-                            : "bonusBalance"
-                    );
 
-                }
+        /*
+         * Case 1: still genuinely within its original betting
+         * window - nothing has actually gone wrong.
+         */
 
-                bet.result = "voided";
+        if (
+            orphanedRound.status === "betting" &&
+            orphanedRound.endTime &&
+            orphanedRound.endTime.getTime() > now
+        ) {
 
-                await bet.save();
-
-            } catch (refundError) {
-
-                console.error(
-                    "Orphaned Bet Refund Error:",
-                    refundError.message
+            const remainingSeconds =
+                Math.max(
+                    Math.ceil(
+                        (orphanedRound.endTime.getTime() - now) / 1000
+                    ),
+                    1
                 );
 
-            }
+            console.warn(
+                `Recovering round #${orphanedRound.roundNumber} - still within its betting window (${remainingSeconds}s left), resuming in place.`
+            );
+
+            currentRound =
+                orphanedRound;
+
+            gameStatus =
+                "running";
+
+            timer.startTimer(
+                remainingSeconds,
+                processRound
+            );
+
+            broadcastGameState();
+
+            return true;
 
         }
+
+
+        /*
+         * Case 3: betting closed with no finalized result -
+         * refund every pending bet's stake exactly once, then
+         * void the round.
+         */
 
         const previousStatus =
             orphanedRound.status;
+
+        console.warn(
+            `Recovering round #${orphanedRound.roundNumber} left in "${previousStatus}" with no finalized result - refunding and voiding.`
+        );
+
+        const refundedCount =
+            await refundRoundBets(
+                orphanedRound
+            );
 
         orphanedRound.status = "void";
 
@@ -816,11 +1036,13 @@ const recoverOrphanedRound = async () => {
         notificationService
             .notifyAdmins(
                 "system",
-                "Orphaned round recovered",
-                `Round #${orphanedRound.roundNumber} was left in "${previousStatus}" after a server restart and has been voided. ${pendingBets.length} pending bet(s) were refunded.`,
-                { roundId: String(orphanedRound._id), roundNumber: orphanedRound.roundNumber, refundedBets: pendingBets.length }
+                "Round voided on recovery",
+                `Round #${orphanedRound.roundNumber} was left in "${previousStatus}" with no finalized result (crash, restart or admin stop) and has been voided. ${refundedCount} pending bet(s) were refunded.`,
+                { roundId: String(orphanedRound._id), roundNumber: orphanedRound.roundNumber, refundedBets: refundedCount }
             )
             .catch(() => {});
+
+        return false;
 
     } catch (error) {
 
@@ -828,6 +1050,8 @@ const recoverOrphanedRound = async () => {
             "Recover Orphaned Round Error:",
             error.message
         );
+
+        return false;
 
     }
 
@@ -873,10 +1097,15 @@ const startGame = async () => {
     );
 
 
-    await recoverOrphanedRound();
+    const resumedExistingRound =
+        await recoverOrphanedRound();
 
 
-    await startRound();
+    if (!resumedExistingRound) {
+
+        await startRound();
+
+    }
 
 
     return {
@@ -1242,15 +1471,49 @@ const startNewRound = async () => {
 
 
     /*
-     * Lock current round if present
+     * Settle the round being abandoned, if any - createRound()
+     * (called via startRound() below) force-completes any
+     * round still not "completed"/"void" with no payout at all,
+     * so this MUST be fully resolved first or its bets would be
+     * silently stranded (never paid, never refunded, and no
+     * longer reachable by crash recovery once "completed").
      */
 
     if (currentRound) {
 
-        currentRound.status =
-            "locked";
+        if (currentRound.result) {
 
-        await currentRound.save();
+            /*
+             * A result was already determined for this round -
+             * finish settling it properly rather than abandoning
+             * it mid-flight.
+             */
+
+            await finalizeRoundSettlement(
+                currentRound,
+                currentRound.result
+            );
+
+        } else if (
+            currentRound.status !== "completed" &&
+            currentRound.status !== "void"
+        ) {
+
+            /*
+             * No result was ever finalized for this round -
+             * refund every pending bet's stake, then void it.
+             */
+
+            await refundRoundBets(
+                currentRound
+            );
+
+            currentRound.status =
+                "void";
+
+            await currentRound.save();
+
+        }
 
     }
 
@@ -1303,6 +1566,24 @@ const voidCurrentRound = async () => {
 
 
     timer.stopTimer();
+
+
+    /*
+     * No result was ever finalized for this round - refund
+     * every pending bet's stake before voiding it. (If a
+     * result was already determined, leave bets untouched -
+     * voiding at that point is an explicit admin override, not
+     * a cancellation, and refunding could let a losing bet
+     * dodge its outcome or shortchange a winner.)
+     */
+
+    if (!currentRound.result) {
+
+        await refundRoundBets(
+            currentRound
+        );
+
+    }
 
 
     currentRound.status =

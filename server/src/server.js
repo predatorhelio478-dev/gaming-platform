@@ -54,7 +54,15 @@ initializeSocket(
  * ==========================================
  */
 
-gameEngine.startGameEngine();
+gameEngine.startGameEngine()
+    .catch((error) => {
+
+        console.error(
+            "Game Engine Startup Error:",
+            error.message
+        );
+
+    });
 
 
 /*
