@@ -8,16 +8,33 @@ import {
     Sparkles,
 } from "lucide-react";
 
-import { useRouter } from "next/navigation";
+import {
+    usePathname,
+    useRouter,
+} from "next/navigation";
 
 
 // ======================================================
 // 404 NOT FOUND PAGE
 // ======================================================
+//
+// Shared by both the admin section and the regular user
+// section - there is no "/dashboard" route in either (the
+// admin home is "/admin/dashboard", the user home is
+// "/games/color-prediction", see app/page.tsx). Which one
+// "home" means depends on which section the visitor was in.
+// ======================================================
 
 export default function NotFound() {
 
     const router = useRouter();
+
+    const pathname = usePathname();
+
+    const homePath =
+        pathname?.startsWith("/admin")
+            ? "/admin/dashboard"
+            : "/games/color-prediction";
 
 
     // ==================================================
@@ -38,7 +55,7 @@ export default function NotFound() {
         }
 
 
-        router.push("/dashboard");
+        router.push(homePath);
 
     };
 
@@ -49,7 +66,7 @@ export default function NotFound() {
 
     const handleHome = () => {
 
-        router.push("/dashboard");
+        router.push(homePath);
 
     };
 

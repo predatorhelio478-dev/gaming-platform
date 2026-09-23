@@ -33,30 +33,34 @@ const leaderboardRoutes = require("./routes/leaderboardRoutes");
 const sanitizeInput = require("./middleware/sanitizeInput");
 const errorHandler = require("./middleware/errorHandler");
 const { generalApiLimiter } = require("./middleware/rateLimiters");
-const { getClientUrl } = require("./config/clientUrl");
+const { isOriginAllowed } = require("./config/allowedOrigins");
 const app = express();
 
 app.use(helmet());
 
 /*
- * Resolved per-request (not once at boot) so an admin-updated
- * Settings -> General -> Frontend URL takes effect immediately,
- * with no restart. Same single-allowed-origin security model
- * as a static string - just sourced dynamically, falling back
- * to the CLIENT_URL env var if unset/unreadable.
+ * Resolved per-request (not once at boot) against the full
+ * allowlist (Settings -> General -> Frontend URL, CLIENT_URL,
+ * ALLOWED_ORIGINS - see config/allowedOrigins.js), so an
+ * admin-updated Frontend URL takes effect immediately with no
+ * restart, without that single DB value being the only thing
+ * standing between a correct deploy and every request failing
+ * CORS. The exact matched origin is echoed back (never "*" -
+ * required for credentials:true to work, and keeps this a real
+ * allowlist rather than an open CORS policy).
  */
 app.use(cors({
     origin: async (origin, callback) => {
 
         try {
 
-            const clientUrl = await getClientUrl();
+            const allowed = await isOriginAllowed(origin);
 
-            callback(null, clientUrl);
+            callback(null, allowed ? origin : false);
 
         } catch (error) {
 
-            callback(null, process.env.CLIENT_URL);
+            callback(null, false);
 
         }
 
