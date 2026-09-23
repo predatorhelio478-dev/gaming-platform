@@ -85,10 +85,10 @@ emailService.verifySmtpConnection()
                 "[emailService] SMTP connection verified - real emails will be sent."
             );
 
-        } else if (result.reason === "SMTP not configured") {
+        } else if (result.reason?.startsWith("SMTP not configured")) {
 
             console.warn(
-                "[emailService] SMTP not configured (SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS) - OTP/notification emails will use the dev-only console fallback."
+                `[emailService] ${result.reason} - OTP/notification emails will use the dev-only console fallback.`
             );
 
         } else {

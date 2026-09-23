@@ -52,6 +52,24 @@ const defaultEmailTemplates = [
     },
 
     {
+        key: "admin_welcome",
+        name: "Admin: Welcome / Account Created",
+        description: "Sent to a new admin right after their account is auto-created by the admin seeder.",
+        subject: "Your admin account on {{site_name}} is ready",
+        body:
+            "Hi {{name}},\n\n" +
+            "An admin account has been created for you on {{site_name}}.\n\n" +
+            "Username: {{username}}\n" +
+            "Email: {{email}}\n" +
+            "Role: {{role}}\n\n" +
+            "Log in with the username/email above and the password that was configured for this account. If you did not expect this account to be created, please contact a super admin immediately.",
+        ctaText: "",
+        ctaUrlVariable: "",
+        variables: ["name", "username", "email", "role", "site_name"],
+        isActive: true,
+    },
+
+    {
         key: "forgot_password",
         name: "User: Forgot Password Code",
         description: "Sent to a user who requested a password reset code.",

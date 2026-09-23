@@ -22,14 +22,31 @@ const { buildEmailHtml, textToHtmlParagraphs } = require("./emailShellService");
 let cachedTransporter = null;
 let warnedNotConfigured = false;
 
+/*
+ * Named, per-variable check (never logs a value, just which
+ * names are present/missing) so a startup log can say exactly
+ * which SMTP_* var is the problem instead of a blanket
+ * "not configured" - the difference between "fix SMTP_PORT" and
+ * re-checking all four from scratch.
+ */
+const REQUIRED_SMTP_VARS = [
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "SMTP_PASS",
+];
+
+const getMissingSmtpVars = () => {
+
+    return REQUIRED_SMTP_VARS.filter(
+        (name) => !String(process.env[name] || "").trim()
+    );
+
+};
+
 const isEmailConfigured = () => {
 
-    return Boolean(
-        process.env.SMTP_HOST &&
-        process.env.SMTP_PORT &&
-        process.env.SMTP_USER &&
-        process.env.SMTP_PASS
-    );
+    return getMissingSmtpVars().length === 0;
 
 };
 
@@ -41,13 +58,36 @@ const getTransporter = () => {
 
     }
 
+    const rawPort =
+        String(process.env.SMTP_PORT || "").trim();
+
+    const parsedPort =
+        Number(rawPort);
+
+    if (!Number.isFinite(parsedPort) || parsedPort <= 0) {
+
+        // A common copy/paste mistake (quotes, stray
+        // whitespace/characters) silently produced NaN here
+        // before, which then silently fell back to 587 - surface
+        // it instead of guessing.
+        console.warn(
+            `[emailService] SMTP_PORT ("${rawPort}") is not a valid port number - defaulting to 587.`
+        );
+
+    }
+
+    const port =
+        Number.isFinite(parsedPort) && parsedPort > 0
+            ? parsedPort
+            : 587;
+
     cachedTransporter = nodemailer.createTransport({
 
         host: process.env.SMTP_HOST,
 
-        port: Number(process.env.SMTP_PORT) || 587,
+        port,
 
-        secure: Number(process.env.SMTP_PORT) === 465,
+        secure: port === 465,
 
         auth: {
             user: process.env.SMTP_USER,
@@ -75,10 +115,13 @@ const sendEmail = async ({ to, subject, text, html, heading, ctaText, ctaUrl }) 
 
     if (!isEmailConfigured()) {
 
+        const missing =
+            getMissingSmtpVars();
+
         if (!warnedNotConfigured) {
 
             console.warn(
-                "[emailService] SMTP is not configured (SMTP_HOST/PORT/USER/PASS) - emails will not be sent."
+                `[emailService] SMTP is not configured - missing: ${missing.join(", ")}. Emails will not be sent.`
             );
 
             warnedNotConfigured = true;
@@ -97,7 +140,7 @@ const sendEmail = async ({ to, subject, text, html, heading, ctaText, ctaUrl }) 
 
         return {
             sent: false,
-            reason: "SMTP not configured",
+            reason: `SMTP not configured (missing: ${missing.join(", ")})`,
         };
 
     }
@@ -154,6 +197,10 @@ const sendEmail = async ({ to, subject, text, html, heading, ctaText, ctaUrl }) 
 
     } catch (error) {
 
+        // error.message is a Nodemailer/SMTP protocol error
+        // (e.g. "Invalid login: 535 ...", "connect ECONNREFUSED
+        // ...") - it never includes the password/credentials
+        // themselves, so it's safe to both log and return here.
         console.error(
             "[emailService] Send failed:",
             error.message
@@ -162,7 +209,7 @@ const sendEmail = async ({ to, subject, text, html, heading, ctaText, ctaUrl }) 
 
         return {
             sent: false,
-            reason: "Send failed",
+            reason: error.message || "Send failed",
         };
 
     }
@@ -184,11 +231,14 @@ const sendEmail = async ({ to, subject, text, html, heading, ctaText, ctaUrl }) 
 
 const verifySmtpConnection = async () => {
 
-    if (!isEmailConfigured()) {
+    const missing =
+        getMissingSmtpVars();
+
+    if (missing.length > 0) {
 
         return {
             ok: false,
-            reason: "SMTP not configured",
+            reason: `SMTP not configured (missing: ${missing.join(", ")})`,
         };
 
     }
