@@ -339,6 +339,22 @@ export const getCurrentRound =
     };
 
 
+// REST fallback used by the color-prediction page's hybrid
+// realtime client (see lib/hybridGameClient.js) when Socket.IO
+// is unavailable - mirrors the "game_state" socket event.
+export const getGameStatus =
+    async () => {
+
+        return await apiRequest(
+            "/game/status",
+            {
+                method: "GET",
+            }
+        );
+
+    };
+
+
 export const getGameHistory =
     async () => {
 

@@ -4,6 +4,8 @@ const router = express.Router();
 
 const {
 
+    status,
+
     currentRound,
 
     history,
@@ -11,6 +13,8 @@ const {
     historyPaginated
 
 } = require("../controllers/gameController");
+
+router.get("/status", status);
 
 router.get("/current", currentRound);
 

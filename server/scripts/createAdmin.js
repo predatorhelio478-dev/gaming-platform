@@ -1,83 +1,41 @@
 require("dotenv").config();
 
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
 
-const Admin = require("../src/models/Admin");
+const seedAdmin = require("../src/seeders/adminSeeder");
 
-const createAdmin = async () => {
+/*
+ * Standalone entrypoint for creating just the default admin.
+ * Prefer `npm run seed` for full production setup (settings,
+ * email templates, FAQ, admin) - this is kept for when only
+ * the admin account is needed.
+ *
+ * Reads ADMIN_EMAIL / ADMIN_PASSWORD (required) and optional
+ * ADMIN_USERNAME / ADMIN_NAME from the environment - see
+ * src/seeders/adminSeeder.js for the idempotent creation logic
+ * (skips if an admin already exists, never overwrites one).
+ */
+
+const run = async () => {
+
     try {
-        await mongoose.connect(
-            process.env.MONGO_URI
-        );
 
-        console.log(
-            "MongoDB connected."
-        );
+        await mongoose.connect(process.env.MONGO_URI);
 
-        const existingAdmin =
-            await Admin.findOne({
-                username: "admin",
-            });
+        console.log("MongoDB connected.");
 
-        if (existingAdmin) {
-            console.log(
-                "Admin already exists."
-            );
-
-            process.exit(0);
-        }
-
-        const hashedPassword =
-            await bcrypt.hash(
-                "Admin@12345",
-                12
-            );
-
-        const admin =
-            await Admin.create({
-                name: "System Administrator",
-
-                username: "admin",
-
-                email:
-                    "admin@gamingplatform.local",
-
-                password:
-                    hashedPassword,
-
-                role: "super_admin",
-
-                isActive: true,
-            });
-
-        console.log(
-            "Admin created successfully."
-        );
-
-        console.log(
-            "Username: admin"
-        );
-
-        console.log(
-            "Password: Admin@12345"
-        );
-
-        console.log(
-            "Admin ID:",
-            admin._id.toString()
-        );
+        await seedAdmin();
 
         process.exit(0);
 
     } catch (error) {
-        console.error(
-            "Create Admin Error:",
-            error
-        );
+
+        console.error("Create Admin Error:", error.message);
 
         process.exit(1);
+
     }
+
 };
 
-createAdmin();
+run();

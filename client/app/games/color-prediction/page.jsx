@@ -6,7 +6,7 @@ import {
     useState,
 } from "react";
 
-import { io } from "socket.io-client";
+import { createHybridGameClient } from "../../../lib/hybridGameClient";
 
 import { useRouter } from "next/navigation";
 
@@ -405,6 +405,12 @@ export default function ColorPredictionPage() {
 
 
     const [
+        realtimeMode,
+        setRealtimeMode,
+    ] = useState("connecting");
+
+
+    const [
         round,
         setRound,
     ] = useState(null);
@@ -776,12 +782,15 @@ export default function ColorPredictionPage() {
 
 
             /*
-             * Socket connection.
+             * Hybrid realtime connection - Socket.IO primary,
+             * automatic REST polling fallback if it fails or
+             * disconnects, automatic switch back once it
+             * reconnects. See lib/hybridGameClient.js.
              */
 
             const newSocket =
-                io(
-                    SOCKET_URL
+                createHybridGameClient(
+                    { socketUrl: SOCKET_URL }
                 );
 
 
@@ -812,6 +821,33 @@ export default function ColorPredictionPage() {
 
                 }
             );
+
+
+            newSocket.on(
+                "mode",
+                (data) => {
+
+                    setRealtimeMode(
+                        data?.mode ||
+                        "connecting"
+                    );
+
+                    if (
+                        data?.mode ===
+                        "poll"
+                    ) {
+
+                        setConnected(
+                            true
+                        );
+
+                    }
+
+                }
+            );
+
+
+            newSocket.connect();
 
 
             // ==================================================
