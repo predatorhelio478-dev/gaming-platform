@@ -15,22 +15,23 @@
  *
  * Schedule: the 1st failed attempt is never locked out (typos
  * happen) - starting from the 2nd consecutive failure, each
- * further failure escalates to the next tier below. Once the
- * schedule is exhausted, it stays at the last (10 minute) tier
- * rather than growing without bound, so a legitimate user who
- * forgot their password is never locked out indefinitely.
+ * further failure escalates to the next tier below. The lockout
+ * duration is capped at 60 seconds (1 minute) - it still
+ * escalates with repeated failures (security intact, a bot can
+ * never brute-force faster than one guess per lockout tier), it
+ * just never makes a legitimate user wait longer than 60s for
+ * any single wait. Once the schedule is exhausted, it stays at
+ * the last (60s) tier rather than growing further.
  *
- *   2nd failure  -> 30s
- *   3rd failure  -> 1m
- *   4th failure  -> 2m
- *   5th failure  -> 5m
- *   6th failure  -> 7m
- *   7th+ failure -> 10m
+ *   2nd failure  -> 15s
+ *   3rd failure  -> 30s
+ *   4th failure  -> 45s
+ *   5th+ failure -> 60s
  *
  * A single successful login resets the counter to zero.
  */
 
-const LOCKOUT_SCHEDULE_SECONDS = [30, 60, 120, 300, 420, 600];
+const LOCKOUT_SCHEDULE_SECONDS = [15, 30, 45, 60];
 
 const formatDuration = (totalSeconds) => {
 

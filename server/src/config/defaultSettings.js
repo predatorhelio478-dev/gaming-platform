@@ -342,9 +342,9 @@ const defaultSettings = [
     {
         category: "security",
         key: "session_timeout",
-        value: 120,
+        value: 1440,
         type: "number",
-        description: "Session timeout in minutes",
+        description: "Session timeout in minutes (1440 = 24 hours)",
     },
 
     {
