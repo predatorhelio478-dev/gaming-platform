@@ -24,13 +24,14 @@ export default function AuthShell({
     children,
     footer,
     bottomText,
+    bottomTextSuffix = "• Secure Access",
     maxWidth = "max-w-[430px]",
 }) {
 
     const { siteName, siteDescription } = useSiteSettings();
 
     const resolvedBottomText =
-        bottomText || `${siteDescription} • Secure Access`;
+        bottomText || `${siteDescription} ${bottomTextSuffix}`;
 
     return (
         <main className="relative min-h-screen overflow-hidden bg-[#070914] text-white">

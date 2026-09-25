@@ -286,7 +286,7 @@ function RegisterForm() {
                 cardDescription={`We sent a 6-digit code to ${formData.email}.`}
                 error={error}
                 success={success}
-                bottomText="Gaming Platform • Secure Player Access"
+                bottomTextSuffix="• Secure Player Access"
                 footer={
                     <button
                         type="button"
@@ -364,7 +364,7 @@ function RegisterForm() {
                         : error
                 }
                 success={success}
-                bottomText="Gaming Platform • Secure Player Access"
+                bottomTextSuffix="• Secure Player Access"
                 footer={
                     <p className="text-sm text-slate-500">
                         Already have an account?

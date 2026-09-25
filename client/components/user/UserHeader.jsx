@@ -20,6 +20,7 @@ import {
 
 import NotificationBell from "./NotificationBell";
 import useAuth from "../../lib/useAuth";
+import useSiteSettings from "../../lib/useSiteSettings";
 
 
 // ======================================================
@@ -30,7 +31,7 @@ export default function UserHeader({
 
     title = "Dashboard",
 
-    subtitle = "Gaming Platform",
+    subtitle,
 
     walletBalance = 0,
 
@@ -43,6 +44,10 @@ export default function UserHeader({
     onMenuClick,
 
 }) {
+
+    const { siteDescription } = useSiteSettings();
+
+    const resolvedSubtitle = subtitle || siteDescription;
 
     const router =
         useRouter();
@@ -226,7 +231,7 @@ export default function UserHeader({
                             sm:block
                         "
                     >
-                        {subtitle}
+                        {resolvedSubtitle}
                     </p>
 
 

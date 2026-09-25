@@ -23,6 +23,9 @@ import useWallet
 import { handleSessionExpiry }
     from "../../lib/api";
 
+import useSiteSettings
+    from "../../lib/useSiteSettings";
+
 
 // ======================================================
 // USER LAYOUT
@@ -46,13 +49,19 @@ export default function UserLayout({
 
     title = "Dashboard",
 
-    subtitle = "Gaming Platform",
+    subtitle,
 
     walletBalance,
 
     loadingWallet,
 
 }) {
+
+    const { siteDescription } =
+        useSiteSettings();
+
+    const resolvedSubtitle =
+        subtitle || siteDescription;
 
     const sharedWallet =
         useWallet();
@@ -321,7 +330,7 @@ export default function UserLayout({
                         title
                     }
                     subtitle={
-                        subtitle
+                        resolvedSubtitle
                     }
                     walletBalance={
                         resolvedWalletBalance

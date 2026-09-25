@@ -605,7 +605,7 @@ function LoginForm() {
                 cardDescription={`We sent a 6-digit code to your ${verificationChannel === "email" ? "email" : "mobile number"}.`}
                 error={error}
                 success={success}
-                bottomText="Gaming Platform • Secure Player Access"
+                bottomTextSuffix="• Secure Player Access"
                 footer={
                     <button
                         type="button"
@@ -694,7 +694,7 @@ function LoginForm() {
                         ? <RateLimitCountdown formatted={loginLimiter.formatted} />
                         : error
                 }
-                bottomText="Gaming Platform • Secure Player Access"
+                bottomTextSuffix="• Secure Player Access"
                 footer={
                     <p className="text-sm text-slate-500">
                         Don&apos;t have an account?

@@ -236,7 +236,7 @@ function ForgotPasswordForm() {
                     cardDescription="Check your email for the 6-digit reset code."
                     error={error}
                     success={success}
-                    bottomText="Gaming Platform • Secure Player Access"
+                    bottomTextSuffix="• Secure Player Access"
                     footer={
                         resetComplete ? null : (
                             <button
@@ -368,7 +368,7 @@ function ForgotPasswordForm() {
                 cardDescription="Enter your username or email and we'll send a reset code if an account exists."
                 error={error}
                 success={success}
-                bottomText="Gaming Platform • Secure Player Access"
+                bottomTextSuffix="• Secure Player Access"
                 footer={
                     <p className="text-sm text-slate-500">
                         Remembered your password?

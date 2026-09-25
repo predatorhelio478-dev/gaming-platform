@@ -231,7 +231,7 @@ function AdminForgotPasswordForm() {
                 cardDescription="Check your email for the 6-digit reset code."
                 error={error}
                 success={success}
-                bottomText="Gaming Platform Administration"
+                bottomTextSuffix="Administration"
                 footer={
                     resetComplete ? null : (
                         <button
@@ -359,7 +359,7 @@ function AdminForgotPasswordForm() {
             cardDescription="Enter your admin username and we'll send a reset code if an account exists."
             error={error}
             success={success}
-            bottomText="Gaming Platform Administration"
+            bottomTextSuffix="Administration"
             footer={
                 <p className="text-sm text-slate-500">
                     Remembered your password?

@@ -135,6 +135,20 @@ const getTransporter = () => {
             pass: process.env.SMTP_PASS,
         },
 
+        // Without these, a host that silently drops/blocks the
+        // outbound SMTP port (common on PaaS platforms like
+        // Render, which block or heavily throttle 25/465/587 on
+        // some plans) leaves the TCP connection attempt hanging
+        // with NO error and NO timeout by default - which then
+        // hangs any awaited caller (e.g. register()'s OTP kick-
+        // off) indefinitely instead of failing fast. Bounded here
+        // so a real connectivity problem surfaces as a normal
+        // ETIMEDOUT within seconds, not an unbounded hang that
+        // can take down an entire request.
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+
     });
 
     return cachedTransporter;

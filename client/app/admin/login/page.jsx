@@ -485,7 +485,7 @@ function AdminLoginForm() {
                     ? <RateLimitCountdown formatted={adminLoginLimiter.formatted} />
                     : error
             }
-            bottomText="Gaming Platform Administration"
+            bottomTextSuffix="Administration"
             footer={
                 <p className="text-xs text-slate-600">
                     Authorized administrators only
