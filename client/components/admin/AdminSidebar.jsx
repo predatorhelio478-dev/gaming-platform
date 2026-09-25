@@ -21,6 +21,7 @@ import {
     Mail,
 } from "lucide-react";
 import { getCurrentAdmin, adminLogout } from "../../lib/adminApi";
+import useSiteSettings from "../../lib/useSiteSettings";
 
 const menuItems = [
     { label: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboard },
@@ -42,6 +43,7 @@ const menuItems = [
 export default function AdminSidebar() {
     const router = useRouter();
     const pathname = usePathname();
+    const { siteName } = useSiteSettings();
     const [mobileMenu, setMobileMenu] = useState(false);
     const [admin, setAdmin] = useState(null);
 
@@ -104,7 +106,7 @@ export default function AdminSidebar() {
                         </div>
 
                         <div className="ml-3">
-                            <p className="font-black tracking-wide">Gamzzones</p>
+                            <p className="font-black tracking-wide">{siteName}</p>
                             <p className="text-[10px] uppercase tracking-[0.2em] text-purple-400">
                                 Admin Panel
                             </p>

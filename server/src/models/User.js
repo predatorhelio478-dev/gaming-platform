@@ -131,6 +131,21 @@ const userSchema = new mongoose.Schema(
     },
 
     /*
+     * Progressive login lockout (see server/src/utils/loginLockout.js).
+     * failedLoginAttempts resets to 0 on any successful login.
+     * lockoutUntil is null when not currently locked out.
+     */
+    failedLoginAttempts: {
+      type: Number,
+      default: 0,
+    },
+
+    lockoutUntil: {
+      type: Date,
+      default: null,
+    },
+
+    /*
      * Per-user opt-out for email/SMS notification delivery.
      * In-app notifications are never gated by these - only
      * whether an email/SMS is additionally sent for them.

@@ -65,6 +65,20 @@ const adminSchema = new mongoose.Schema(
             type: Date,
             default: null,
         },
+
+        /*
+         * Progressive login lockout (see
+         * server/src/utils/loginLockout.js).
+         */
+        failedLoginAttempts: {
+            type: Number,
+            default: 0,
+        },
+
+        lockoutUntil: {
+            type: Date,
+            default: null,
+        },
     },
     {
         timestamps: true,

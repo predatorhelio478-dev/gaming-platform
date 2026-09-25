@@ -27,9 +27,9 @@ const listAdmins = async (req, res) => {
 
     try {
 
-        const { page = 1, limit = 20, search = "", role = "all" } = req.query;
+        const { page = 1, limit = 20, search = "", role = "all", status = "all" } = req.query;
 
-        const result = await adminManagementService.listAdmins({ page, limit, search, role });
+        const result = await adminManagementService.listAdmins({ page, limit, search, role, status });
 
         return res.status(200).json({ success: true, ...result });
 
@@ -110,17 +110,19 @@ const updateAdmin = async (req, res) => {
             return res.status(400).json({ success: false, message: "Admin ID is required." });
         }
 
-        const { fullName, mobile, role, isActive } = req.body;
+        const { fullName, mobile, role, isActive, username, email } = req.body;
 
         const result = await adminManagementService.updateAdmin(
             id,
-            { fullName, mobile, role, isActive },
+            { fullName, mobile, role, isActive, username, email },
             req.admin
         );
 
         const changed = {};
         if (result.before.role !== result.after.role) changed.role = result.after.role;
         if (result.before.isActive !== result.after.isActive) changed.isActive = result.after.isActive;
+        if (result.before.username !== result.after.username) changed.username = result.after.username;
+        if (result.before.email !== result.after.email) changed.email = result.after.email;
 
         if (Object.keys(changed).length > 0) {
 

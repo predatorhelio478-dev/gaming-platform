@@ -55,6 +55,13 @@ export default function UserLayout({
 
     loadingWallet,
 
+    // Some pages (Color Prediction, Legal & Help, FAQ) must be
+    // viewable without being logged in - only the actions on
+    // top of them (placing a bet, etc.) require auth, checked
+    // separately at the point of that action. Every other page
+    // using this layout stays hard-gated by default.
+    requireAuth = true,
+
 }) {
 
     const { siteDescription } =
@@ -109,10 +116,10 @@ export default function UserLayout({
 
 
     // ==================================================
-    // AUTH GUARD
+    // AUTH GUARD (only when requireAuth is true)
     // ==================================================
     //
-    // Every page that renders inside UserLayout is user-
+    // Most pages that render inside UserLayout are user-
     // protected (Wallet/Settings/Profile/etc). Without this,
     // the page shell rendered even when logged out - only a
     // failed API call deep inside the page would eventually
@@ -124,33 +131,26 @@ export default function UserLayout({
     // handleSessionExpiry() (same helper the API 401
     // interceptor already uses) so the return-URL/redirect-
     // loop logic lives in exactly one place.
+    //
+    // A few pages (Color Prediction, Legal & Help, FAQ) pass
+    // requireAuth={false} because they must be viewable while
+    // logged out - only specific actions on top of them (e.g.
+    // placing a bet) require auth, checked at that action
+    // itself rather than by blocking the whole page.
+    //
+    // Every hook below runs unconditionally, on every render,
+    // regardless of auth state - only the JSX returned differs
+    // (never skip a hook behind a conditional early return).
 
     useEffect(() => {
 
-        if (!auth.isAuthenticated) {
+        if (requireAuth && !auth.isAuthenticated) {
 
             handleSessionExpiry();
 
         }
 
-    }, [auth.isAuthenticated]);
-
-
-    if (!auth.isAuthenticated) {
-
-        return (
-
-            <div className="flex min-h-screen items-center justify-center bg-[#070914]">
-
-                <div className="text-sm text-slate-500">
-                    Checking session...
-                </div>
-
-            </div>
-
-        );
-
-    }
+    }, [requireAuth, auth.isAuthenticated]);
 
 
     // ==================================================
@@ -200,6 +200,23 @@ export default function UserLayout({
         };
 
     }, []);
+
+
+    if (requireAuth && !auth.isAuthenticated) {
+
+        return (
+
+            <div className="flex min-h-screen items-center justify-center bg-[#070914]">
+
+                <div className="text-sm text-slate-500">
+                    Checking session...
+                </div>
+
+            </div>
+
+        );
+
+    }
 
 
     // ==================================================

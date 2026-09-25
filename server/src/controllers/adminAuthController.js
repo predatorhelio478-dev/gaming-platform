@@ -8,6 +8,7 @@ const otpService = require("../services/otpService");
 const emailService = require("../services/emailService");
 const emailTemplateService = require("../services/emailTemplateService");
 const settingsService = require("../services/settingsService");
+const { assertNotLockedOut, recordFailedAttempt, resetLockout, formatDuration } = require("../utils/loginLockout");
 
 
 // ==========================================
@@ -122,6 +123,31 @@ const adminLogin = async (req, res) => {
             });
         }
 
+        // Locked out blocks every attempt during the window,
+        // even one with the correct password.
+        try {
+
+            assertNotLockedOut(admin);
+
+        } catch (lockoutError) {
+
+            await createAuditLog({
+                actorType: "admin",
+                actorId: admin._id,
+                action: "admin.login_failed",
+                module: "auth",
+                metadata: { reason: "locked_out" },
+                ...requestContext,
+            }).catch(() => {});
+
+            return res.status(lockoutError.statusCode || 429).json({
+                success: false,
+                message: lockoutError.message,
+                retryAfterSeconds: lockoutError.retryAfterSeconds,
+            });
+
+        }
+
         const passwordMatch =
             await bcrypt.compare(
                 password,
@@ -129,21 +155,30 @@ const adminLogin = async (req, res) => {
             );
 
         if (!passwordMatch) {
+
+            const { retryAfterSeconds } =
+                await recordFailedAttempt(admin);
+
             await createAuditLog({
                 actorType: "admin",
                 actorId: admin._id,
                 action: "admin.login_failed",
                 module: "auth",
-                metadata: { reason: "invalid_password" },
+                metadata: { reason: "invalid_password", retryAfterSeconds },
                 ...requestContext,
             }).catch(() => {});
 
-            return res.status(401).json({
+            return res.status(retryAfterSeconds ? 429 : 401).json({
                 success: false,
                 message:
-                    "Invalid admin credentials.",
+                    retryAfterSeconds
+                        ? `Invalid admin credentials. Too many failed attempts - try again in ${formatDuration(retryAfterSeconds)}.`
+                        : "Invalid admin credentials.",
+                ...(retryAfterSeconds ? { retryAfterSeconds } : {}),
             });
         }
+
+        await resetLockout(admin);
 
         const token = jwt.sign(
             {

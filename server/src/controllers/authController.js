@@ -10,6 +10,7 @@ const emailService = require("../services/emailService");
 const emailTemplateService = require("../services/emailTemplateService");
 const { normalizeMobile } = require("../validators/requestValidators");
 const { createAuditLog } = require("../services/auditLogService");
+const { assertNotLockedOut, recordFailedAttempt, resetLockout, formatDuration } = require("../utils/loginLockout");
 
 
 // ======================================================
@@ -661,6 +662,10 @@ const findUserByCredentials = async (
 
     }
 
+    // Locked out blocks every attempt during the window, even
+    // one with the correct password - see loginLockout.js.
+    assertNotLockedOut(user);
+
     const isMatch =
         await bcrypt.compare(
             password,
@@ -669,12 +674,24 @@ const findUserByCredentials = async (
 
     if (!isMatch) {
 
+        const { retryAfterSeconds } =
+            await recordFailedAttempt(user);
+
         throw Object.assign(
-            new Error("Invalid credentials"),
-            { statusCode: 401 }
+            new Error(
+                retryAfterSeconds
+                    ? `Invalid credentials. Too many failed attempts - try again in ${formatDuration(retryAfterSeconds)}.`
+                    : "Invalid credentials"
+            ),
+            {
+                statusCode: retryAfterSeconds ? 429 : 401,
+                retryAfterSeconds,
+            }
         );
 
     }
+
+    await resetLockout(user);
 
     if (user.status === "blocked") {
 
@@ -878,6 +895,10 @@ exports.login = async (
                     ? err.message
                     : "Unable to login.",
 
+            ...(err.retryAfterSeconds
+                ? { retryAfterSeconds: err.retryAfterSeconds }
+                : {}),
+
         });
 
     }
@@ -1076,6 +1097,10 @@ exports.verifyAndLogin = async (
             message:
                 error.message ||
                 "Unable to verify.",
+
+            ...(error.retryAfterSeconds
+                ? { retryAfterSeconds: error.retryAfterSeconds }
+                : {}),
 
         });
 

@@ -146,7 +146,7 @@ export default function FaqContent() {
 
 
     return (
-        <UserLayout title="FAQ">
+        <UserLayout title="FAQ" requireAuth={false}>
             <div className="p-4 sm:p-6 lg:p-8">
 
                 <UserPageHeader

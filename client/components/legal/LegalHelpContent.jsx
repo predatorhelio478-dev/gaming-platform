@@ -467,7 +467,7 @@ export default function LegalHelpContent() {
 
 
     return (
-        <UserLayout title="Legal & Help">
+        <UserLayout title="Legal & Help" requireAuth={false}>
             <div className="p-4 sm:p-6 lg:p-8">
 
                 <UserPageHeader

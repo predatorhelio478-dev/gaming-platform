@@ -25,7 +25,7 @@ export default function AuthShell({
     footer,
     bottomText,
     bottomTextSuffix = "• Secure Access",
-    maxWidth = "max-w-[430px]",
+    maxWidth = "max-w-2xl",
 }) {
 
     const { siteName, siteDescription } = useSiteSettings();

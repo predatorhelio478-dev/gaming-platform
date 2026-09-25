@@ -2176,7 +2176,7 @@ export const updateAdminEmailTemplate = async (key, payload) => {
 // above, which manages the User/player collection)
 // ==========================================
 
-export const getAdminAdmins = async ({ page = 1, limit = 20, search = "", role = "all" } = {}) => {
+export const getAdminAdmins = async ({ page = 1, limit = 20, search = "", role = "all", status = "all" } = {}) => {
 
     const params = new URLSearchParams();
 
@@ -2185,6 +2185,7 @@ export const getAdminAdmins = async ({ page = 1, limit = 20, search = "", role =
 
     if (search) params.set("search", search);
     if (role && role !== "all") params.set("role", role);
+    if (status && status !== "all") params.set("status", status);
 
     return await adminRequest(`/admin/admins?${params.toString()}`, { method: "GET" });
 

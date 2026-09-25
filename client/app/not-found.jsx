@@ -13,6 +13,8 @@ import {
     useRouter,
 } from "next/navigation";
 
+import useSiteSettings from "../lib/useSiteSettings";
+
 
 // ======================================================
 // 404 NOT FOUND PAGE
@@ -30,6 +32,8 @@ export default function NotFound() {
     const router = useRouter();
 
     const pathname = usePathname();
+
+    const { siteName } = useSiteSettings();
 
     const homePath =
         pathname?.startsWith("/admin")
@@ -219,7 +223,7 @@ export default function NotFound() {
                                 text-white
                             "
                         >
-                            Gamzzones
+                            {siteName}
                         </p>
 
 

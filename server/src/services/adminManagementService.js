@@ -84,7 +84,7 @@ const assertCanModifyTarget = (actingAdmin, targetAdmin) => {
 // LIST ADMINS + ROLE COUNTS
 // ======================================================
 
-const listAdmins = async ({ page = 1, limit = 20, search = "", role = "all" }) => {
+const listAdmins = async ({ page = 1, limit = 20, search = "", role = "all", status = "all" }) => {
 
     const pageNum = Math.max(1, Number(page) || 1);
     const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
@@ -93,6 +93,12 @@ const listAdmins = async ({ page = 1, limit = 20, search = "", role = "all" }) =
 
     if (role !== "all" && ROLES.includes(role)) {
         filter.role = role;
+    }
+
+    if (status === "active") {
+        filter.isActive = true;
+    } else if (status === "deactivated") {
+        filter.isActive = false;
     }
 
     if (search?.trim()) {
@@ -215,10 +221,83 @@ const updateAdmin = async (id, updates, actingAdmin) => {
     const before = {
         role: admin.role,
         isActive: admin.isActive,
+        username: admin.username,
+        email: admin.email,
     };
 
     if (updates.fullName !== undefined) admin.name = String(updates.fullName).trim();
     if (updates.mobile !== undefined) admin.mobile = String(updates.mobile).trim();
+
+    // Username/email are otherwise permanent identity fields -
+    // only a super_admin may change them, and this is enforced
+    // here (not just in the UI, which hides/disables the inputs
+    // for a non-super-admin) so a crafted direct API call can't
+    // bypass it either.
+    if (updates.username !== undefined || updates.email !== undefined) {
+
+        if (actingAdmin.role !== "super_admin") {
+
+            const error = new Error(
+                "Only a super admin can change an admin's username or email."
+            );
+            error.statusCode = 403;
+            throw error;
+
+        }
+
+        if (updates.username !== undefined) {
+
+            const normalizedUsername =
+                String(updates.username).trim().toLowerCase();
+
+            if (!normalizedUsername) {
+                throw new Error("Username is required.");
+            }
+
+            if (normalizedUsername !== admin.username) {
+
+                const existing = await Admin.findOne({
+                    username: normalizedUsername,
+                    _id: { $ne: admin._id },
+                }).lean();
+
+                if (existing) {
+                    throw new Error("Username is already taken.");
+                }
+
+                admin.username = normalizedUsername;
+
+            }
+
+        }
+
+        if (updates.email !== undefined) {
+
+            const normalizedEmail =
+                String(updates.email).trim().toLowerCase();
+
+            if (!normalizedEmail) {
+                throw new Error("Email is required.");
+            }
+
+            if (normalizedEmail !== admin.email) {
+
+                const existing = await Admin.findOne({
+                    email: normalizedEmail,
+                    _id: { $ne: admin._id },
+                }).lean();
+
+                if (existing) {
+                    throw new Error("Email is already registered.");
+                }
+
+                admin.email = normalizedEmail;
+
+            }
+
+        }
+
+    }
 
     if (updates.role !== undefined && updates.role !== admin.role) {
 
@@ -249,7 +328,12 @@ const updateAdmin = async (id, updates, actingAdmin) => {
     return {
         admin: buildAdminResponse(admin),
         before,
-        after: { role: admin.role, isActive: admin.isActive },
+        after: {
+            role: admin.role,
+            isActive: admin.isActive,
+            username: admin.username,
+            email: admin.email,
+        },
     };
 
 };
