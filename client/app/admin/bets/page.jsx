@@ -803,7 +803,7 @@ export default function BetsPage() {
 
 
                 <footer className="py-8 text-center text-xs text-slate-700">
-                    Gaming Platform Admin Control Center
+                    Gamzzones Admin Control Center
                 </footer>
 
             </div>

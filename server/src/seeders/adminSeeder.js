@@ -38,19 +38,26 @@ const emailTemplateService = require("../services/emailTemplateService");
 
 const seedAdmin = async () => {
     try {
-        const email = process.env.ADMIN_EMAIL;
-        const password = process.env.ADMIN_PASSWORD;
+        // SEED_SUPER_ADMIN_* is the documented name going forward;
+        // ADMIN_* is kept as a fallback so existing deployments
+        // that already set ADMIN_EMAIL/ADMIN_PASSWORD keep working
+        // unchanged after this rename - no env var migration required.
+        const email =
+            process.env.SEED_SUPER_ADMIN_EMAIL || process.env.ADMIN_EMAIL;
+
+        const password =
+            process.env.SEED_SUPER_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
 
         if (!email || !password) {
             console.log(
-                "Admin seeding skipped - set ADMIN_EMAIL and ADMIN_PASSWORD to create a default admin."
+                "Super admin seeding skipped - set SEED_SUPER_ADMIN_EMAIL and SEED_SUPER_ADMIN_PASSWORD (or the legacy ADMIN_EMAIL/ADMIN_PASSWORD) to create the default super admin."
             );
 
             return;
         }
 
         const username =
-            (process.env.ADMIN_USERNAME || "admin")
+            (process.env.SEED_SUPER_ADMIN_USERNAME || process.env.ADMIN_USERNAME || "admin")
                 .toLowerCase()
                 .trim();
 
@@ -70,7 +77,7 @@ const seedAdmin = async () => {
             await bcrypt.hash(password, 12);
 
         const name =
-            process.env.ADMIN_NAME || "System Administrator";
+            process.env.SEED_SUPER_ADMIN_NAME || process.env.ADMIN_NAME || "System Administrator";
 
         const admin = await Admin.create({
             name,
@@ -79,6 +86,8 @@ const seedAdmin = async () => {
             password: hashedPassword,
             role: "super_admin",
             isActive: true,
+            emailVerified: true,
+            phoneVerified: true,
         });
 
         console.log("Admin seeded successfully");

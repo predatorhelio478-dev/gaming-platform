@@ -1182,6 +1182,108 @@ const getUserStats = async (
 
 
 // ======================================================
+// MANUAL EMAIL/MOBILE VERIFICATION (Super Admin only)
+// ======================================================
+//
+// Route-gated to super_admin via requireAdminRole - a normal
+// admin must not be able to reach this at all. Bypasses OTP
+// entirely; every call is audit-logged with who/target/what.
+// ======================================================
+
+const manuallyVerifyEmail = async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+        const result = await adminUserService.manuallyVerifyContact(id, "email");
+
+        if (!result.alreadyVerified) {
+
+            await createAuditLog({
+                actorType: "admin",
+                actorId: req.admin?._id || null,
+                action: "user.email_manually_verified",
+                module: "users",
+                key: id,
+                newValue: { emailVerified: true },
+                ...getRequestContext(req),
+            }).catch(() => {});
+
+        }
+
+        return res.status(200).json({
+            success: true,
+            message:
+                result.alreadyVerified
+                    ? "This user's email is already verified."
+                    : "User's email marked as verified.",
+            data: result.user,
+        });
+
+    } catch (error) {
+
+        console.error("Admin Manual Email Verify Error:", error);
+
+        const statusCode = error.statusCode || 400;
+
+        return res.status(statusCode).json({
+            success: false,
+            message: error.message || "Unable to verify email.",
+        });
+
+    }
+
+};
+
+const manuallyVerifyMobile = async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+        const result = await adminUserService.manuallyVerifyContact(id, "mobile");
+
+        if (!result.alreadyVerified) {
+
+            await createAuditLog({
+                actorType: "admin",
+                actorId: req.admin?._id || null,
+                action: "user.mobile_manually_verified",
+                module: "users",
+                key: id,
+                newValue: { mobileVerified: true },
+                ...getRequestContext(req),
+            }).catch(() => {});
+
+        }
+
+        return res.status(200).json({
+            success: true,
+            message:
+                result.alreadyVerified
+                    ? "This user's mobile number is already verified."
+                    : "User's mobile number marked as verified.",
+            data: result.user,
+        });
+
+    } catch (error) {
+
+        console.error("Admin Manual Mobile Verify Error:", error);
+
+        const statusCode = error.statusCode || 400;
+
+        return res.status(statusCode).json({
+            success: false,
+            message: error.message || "Unable to verify mobile number.",
+        });
+
+    }
+
+};
+
+
+// ======================================================
 // EXPORT
 // ======================================================
 
@@ -1206,5 +1308,9 @@ module.exports = {
     adjustUserBalance,
 
     getUserStats,
+
+    manuallyVerifyEmail,
+
+    manuallyVerifyMobile,
 
 };

@@ -3,6 +3,7 @@ const seedSettings = require("../seeders/settingsSeeder");
 const seedEmailTemplates = require("../seeders/emailTemplateSeeder");
 const seedFaq = require("../seeders/faqSeeder");
 const seedAdmin = require("../seeders/adminSeeder");
+const seedRoleAccounts = require("../seeders/roleAccountSeeder");
 
 const connectDB = async () => {
     try {
@@ -22,6 +23,7 @@ const connectDB = async () => {
          * admin already exists (see seeders/adminSeeder.js).
          */
         await seedAdmin();
+        await seedRoleAccounts();
 
         console.log("MongoDB Connected");
     } catch (err) {

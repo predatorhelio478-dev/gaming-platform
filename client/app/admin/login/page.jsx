@@ -27,6 +27,12 @@ import AuthShell, {
     SecurityNote,
 } from "../../../components/auth/AuthShell";
 
+import RateLimitCountdown
+    from "../../../components/auth/RateLimitCountdown";
+
+import useRateLimitCountdown
+    from "../../../lib/useRateLimitCountdown";
+
 
 /*
  * useSearchParams() requires a Suspense boundary during
@@ -99,6 +105,10 @@ function AdminLoginForm() {
 
     const [showPassword, setShowPassword] =
         useState(false);
+
+
+    const adminLoginLimiter =
+        useRateLimitCountdown("admin_login_rate_limit");
 
 
     // ======================================================
@@ -386,6 +396,20 @@ function AdminLoginForm() {
                 );
 
 
+                if (
+                    loginError?.status === 429 &&
+                    loginError?.data?.retryAfterSeconds
+                ) {
+
+                    adminLoginLimiter.start(
+                        loginError.data.retryAfterSeconds
+                    );
+
+                    return;
+
+                }
+
+
                 setError(
                     loginError?.message ||
                     "Unable to login."
@@ -456,7 +480,11 @@ function AdminLoginForm() {
             cardIcon={<LogIn size={17} className="text-purple-400" />}
             cardTitle="Sign in"
             cardDescription="Enter your administrator credentials."
-            error={error}
+            error={
+                adminLoginLimiter.active
+                    ? <RateLimitCountdown formatted={adminLoginLimiter.formatted} />
+                    : error
+            }
             bottomText="Gaming Platform Administration"
             footer={
                 <p className="text-xs text-slate-600">
@@ -601,12 +629,17 @@ function AdminLoginForm() {
                 <button
                     type="submit"
                     disabled={
-                        loading
+                        loading ||
+                        adminLoginLimiter.active
                     }
                     className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-purple-900/20 transition hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
 
-                    {loading ? (
+                    {adminLoginLimiter.active ? (
+
+                        <span>Try again in {adminLoginLimiter.formatted}</span>
+
+                    ) : loading ? (
 
                         <span className="flex items-center justify-center gap-2">
 

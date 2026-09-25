@@ -33,6 +33,12 @@ import AuthShell, {
     SecurityNote,
 } from "../../components/auth/AuthShell";
 
+import RateLimitCountdown
+    from "../../components/auth/RateLimitCountdown";
+
+import useRateLimitCountdown
+    from "../../lib/useRateLimitCountdown";
+
 
 /*
  * useSearchParams() (here and inside GuestOnly) requires a
@@ -104,8 +110,11 @@ function LoginForm() {
     const [success, setSuccess] =
         useState("");
 
-    const [resendCooldown, setResendCooldown] =
-        useState(0);
+    const loginLimiter =
+        useRateLimitCountdown("login_rate_limit");
+
+    const resendLimiter =
+        useRateLimitCountdown("login_otp_resend_cooldown");
 
 
     // ======================================================
@@ -360,6 +369,20 @@ function LoginForm() {
                 }
 
 
+                if (
+                    loginError?.status === 429 &&
+                    loginError?.data?.retryAfterSeconds
+                ) {
+
+                    loginLimiter.start(
+                        loginError.data.retryAfterSeconds
+                    );
+
+                    return;
+
+                }
+
+
                 setError(
                     loginError?.message ||
                     "Unable to login."
@@ -471,8 +494,6 @@ function LoginForm() {
 
                     setOtp("");
 
-                    setResendCooldown(0);
-
                     setSuccess(
                         "Email verified! Now enter the code sent to your mobile number, or request a new one."
                     );
@@ -489,8 +510,6 @@ function LoginForm() {
                     setVerificationChannel("email");
 
                     setOtp("");
-
-                    setResendCooldown(0);
 
                     setSuccess(
                         "Mobile verified! Now enter the code sent to your email, or request a new one."
@@ -517,7 +536,7 @@ function LoginForm() {
     const handleResendVerification =
         async () => {
 
-            if (resendCooldown > 0 || loading) {
+            if (resendLimiter.active || loading) {
 
                 return;
 
@@ -530,46 +549,39 @@ function LoginForm() {
 
             try {
 
-                await resendVerificationOtp({
+                const result =
+                    await resendVerificationOtp({
 
-                    identifier:
-                        formData.identifier.trim(),
+                        identifier:
+                            formData.identifier.trim(),
 
-                    password:
-                        formData.password,
+                        password:
+                            formData.password,
 
-                    channel: verificationChannel,
+                        channel: verificationChannel,
 
-                });
+                    });
 
 
                 setSuccess(
+                    result?.message ||
                     `A new code has been sent to your ${verificationChannel === "email" ? "email" : "mobile number"}.`
                 );
 
 
-                setResendCooldown(60);
-
-
-                const interval = setInterval(() => {
-
-                    setResendCooldown((previous) => {
-
-                        if (previous <= 1) {
-
-                            clearInterval(interval);
-
-                            return 0;
-
-                        }
-
-                        return previous - 1;
-
-                    });
-
-                }, 1000);
+                resendLimiter.start(
+                    result?.resendCooldownSeconds || 60
+                );
 
             } catch (resendError) {
+
+                if (resendError?.data?.retryAfterSeconds) {
+
+                    resendLimiter.start(
+                        resendError.data.retryAfterSeconds
+                    );
+
+                }
 
                 setError(
                     resendError?.message ||
@@ -650,11 +662,11 @@ function LoginForm() {
                     <button
                         type="button"
                         onClick={handleResendVerification}
-                        disabled={resendCooldown > 0 || loading}
+                        disabled={resendLimiter.active || loading}
                         className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-5 py-3 text-xs font-semibold text-slate-400 transition hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                        {resendCooldown > 0
-                            ? `Resend code in ${resendCooldown}s`
+                        {resendLimiter.active
+                            ? `Resend code in ${resendLimiter.formatted}`
                             : "Resend code"}
                     </button>
 
@@ -677,7 +689,11 @@ function LoginForm() {
                 cardIcon={<LogIn size={17} className="text-purple-400" />}
                 cardTitle="Sign in"
                 cardDescription="Enter your account credentials to continue."
-                error={error}
+                error={
+                    loginLimiter.active
+                        ? <RateLimitCountdown formatted={loginLimiter.formatted} />
+                        : error
+                }
                 bottomText="Gaming Platform • Secure Player Access"
                 footer={
                     <p className="text-sm text-slate-500">
@@ -834,12 +850,17 @@ function LoginForm() {
                     <button
                         type="submit"
                         disabled={
-                            loading
+                            loading ||
+                            loginLimiter.active
                         }
                         className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-purple-900/20 transition hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                     >
 
-                        {loading ? (
+                        {loginLimiter.active ? (
+
+                            <span>Try again in {loginLimiter.formatted}</span>
+
+                        ) : loading ? (
 
                             <span className="flex items-center justify-center gap-2">
 

@@ -47,7 +47,7 @@ const getCurrentPath = () => {
 // HANDLE SESSION EXPIRY
 // ======================================================
 
-const handleSessionExpiry = () => {
+export const handleSessionExpiry = () => {
 
     if (
         typeof window === "undefined"

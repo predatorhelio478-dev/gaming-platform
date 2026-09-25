@@ -2,6 +2,8 @@
 
 import { ShieldCheck } from "lucide-react";
 
+import useSiteSettings from "../../lib/useSiteSettings";
+
 // ======================================================
 // AUTH SHELL
 // ======================================================
@@ -21,9 +23,15 @@ export default function AuthShell({
     success,
     children,
     footer,
-    bottomText = "Gaming Platform • Secure Access",
+    bottomText,
     maxWidth = "max-w-[430px]",
 }) {
+
+    const { siteName, siteDescription } = useSiteSettings();
+
+    const resolvedBottomText =
+        bottomText || `${siteDescription} • Secure Access`;
+
     return (
         <main className="relative min-h-screen overflow-hidden bg-[#070914] text-white">
 
@@ -63,7 +71,7 @@ export default function AuthShell({
                         </div>
 
                         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-purple-400">
-                            Gaming Platform
+                            {siteName}
                         </p>
 
                         <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
@@ -121,7 +129,7 @@ export default function AuthShell({
                     </div>
 
                     <p className="mt-6 text-center text-xs text-slate-600">
-                        {bottomText}
+                        {resolvedBottomText}
                     </p>
 
                 </div>

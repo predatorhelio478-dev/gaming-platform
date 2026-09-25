@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ShieldCheck, Gamepad2 } from "lucide-react";
 
 import { openCookieSettings } from "../common/CookieConsent";
+import useSiteSettings from "../../lib/useSiteSettings";
 
 
 // ======================================================
@@ -14,6 +15,9 @@ export default function UserFooter() {
 
     const currentYear =
         new Date().getFullYear();
+
+    const { siteName } =
+        useSiteSettings();
 
 
     return (
@@ -78,7 +82,7 @@ export default function UserFooter() {
                                 />
                             </span>
 
-                            GAMEZ
+                            {siteName}
 
                         </Link>
 
@@ -268,7 +272,7 @@ export default function UserFooter() {
                     {/* COPYRIGHT */}
 
                     <p>
-                        © {currentYear} GAMEZ.
+                        © {currentYear} {siteName}.
                         All rights reserved.
                     </p>
 

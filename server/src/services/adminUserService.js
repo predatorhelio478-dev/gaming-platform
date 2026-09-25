@@ -2698,6 +2698,53 @@ const getUserStats = async () => {
 
 
 // ======================================================
+// MANUAL EMAIL/MOBILE VERIFICATION (Super Admin only -
+// caller/route enforces the role check; this only enforces
+// the data-integrity rules: user must exist, mobile must
+// actually be on file to "verify" it, and this never sends
+// or checks an OTP - it's a direct, audited override.)
+// ======================================================
+
+const manuallyVerifyContact = async (id, channel) => {
+
+    if (!isValidObjectId(id)) {
+        throw new Error("Invalid user ID.");
+    }
+
+    if (!["email", "mobile"].includes(channel)) {
+        throw new Error("Invalid verification channel.");
+    }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+        const error = new Error("User not found.");
+        error.statusCode = 404;
+        throw error;
+    }
+
+    if (channel === "mobile" && !user.mobile) {
+        throw new Error("This user has no mobile number on file.");
+    }
+
+    const field = channel === "email" ? "emailVerified" : "mobileVerified";
+
+    const alreadyVerified = user[field] === true;
+
+    if (!alreadyVerified) {
+        user[field] = true;
+        await user.save();
+    }
+
+    return {
+        user: buildUserResponse(user),
+        alreadyVerified,
+    };
+
+};
+
+
+// ======================================================
 // EXPORT
 // ======================================================
 
@@ -2722,5 +2769,7 @@ module.exports = {
     adjustUserBalance,
 
     getUserStats,
+
+    manuallyVerifyContact,
 
 };

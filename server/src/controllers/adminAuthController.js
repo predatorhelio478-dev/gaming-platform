@@ -7,6 +7,35 @@ const { createAuditLog } = require("../services/auditLogService");
 const otpService = require("../services/otpService");
 const emailService = require("../services/emailService");
 const emailTemplateService = require("../services/emailTemplateService");
+const settingsService = require("../services/settingsService");
+
+
+// ==========================================
+// ADMIN TOKEN EXPIRY (Settings -> Security ->
+// session_timeout, minutes). Falls back to 1 day if the
+// setting is unset/invalid/unreachable, matching the prior
+// hardcoded behavior - never blocks login over a settings hiccup.
+// ==========================================
+
+const getAdminTokenExpiresIn = async () => {
+
+    try {
+
+        const minutes = Number(
+            await settingsService.getValue("security", "session_timeout", null)
+        );
+
+        if (Number.isFinite(minutes) && minutes > 0) {
+            return `${minutes}m`;
+        }
+
+    } catch (error) {
+        // fall through to default
+    }
+
+    return "1d";
+
+};
 
 
 // ==========================================
@@ -124,7 +153,7 @@ const adminLogin = async (req, res) => {
             },
             process.env.JWT_SECRET,
             {
-                expiresIn: "1d",
+                expiresIn: await getAdminTokenExpiresIn(),
             }
         );
 

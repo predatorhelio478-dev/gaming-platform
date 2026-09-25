@@ -5,6 +5,44 @@ const settingsService = require("../services/settingsService");
 
 /*
  * ==========================================
+ * RATE-LIMIT RESPONSE HANDLER (with countdown)
+ * ==========================================
+ *
+ * express-rate-limit populates req.rateLimit.resetTime (when
+ * standardHeaders is on) with the Date the current window
+ * clears - this turns that into a plain retryAfterSeconds
+ * integer in the JSON body, so the frontend can render a real
+ * countdown instead of only a static string. Falls back to
+ * omitting the field (frontend just shows the message) if
+ * resetTime isn't available for some reason.
+ */
+
+const buildRateLimitHandler = (message) => (req, res) => {
+
+    const resetTime =
+        req.rateLimit?.resetTime;
+
+    const retryAfterSeconds =
+        resetTime
+            ? Math.max(
+                1,
+                Math.ceil(
+                    (new Date(resetTime).getTime() - Date.now()) / 1000
+                )
+            )
+            : undefined;
+
+    res.status(429).json({
+        success: false,
+        message,
+        ...(retryAfterSeconds ? { retryAfterSeconds } : {}),
+    });
+
+};
+
+
+/*
+ * ==========================================
  * AUTH LIMITER
  * ==========================================
  *
@@ -47,11 +85,9 @@ const authLimiter = rateLimit({
 
     legacyHeaders: false,
 
-    message: {
-        success: false,
-        message:
-            "Too many attempts. Please try again later.",
-    },
+    handler: buildRateLimitHandler(
+        "Too many attempts. Please try again later."
+    ),
 
 });
 
@@ -104,11 +140,9 @@ const otpLimiter = rateLimit({
 
     legacyHeaders: false,
 
-    message: {
-        success: false,
-        message:
-            "Too many verification requests. Please try again later.",
-    },
+    handler: buildRateLimitHandler(
+        "Too many verification requests. Please try again later."
+    ),
 
 });
 
@@ -163,11 +197,9 @@ const passwordResetLimiter = rateLimit({
 
     legacyHeaders: false,
 
-    message: {
-        success: false,
-        message:
-            "Too many password reset attempts. Please try again later.",
-    },
+    handler: buildRateLimitHandler(
+        "Too many password reset attempts. Please try again later."
+    ),
 
 });
 

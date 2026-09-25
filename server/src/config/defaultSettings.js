@@ -7,7 +7,7 @@ const defaultSettings = [
     {
         category: "general",
         key: "site_name",
-        value: "Gaming Site",
+        value: "Gamzzones",
         type: "string",
         description: "Website name",
         isPublic: true,
@@ -16,9 +16,9 @@ const defaultSettings = [
     {
         category: "general",
         key: "site_description",
-        value: "Online Gaming Platform",
+        value: "Gaming Platform",
         type: "string",
-        description: "Website description",
+        description: "Website tagline/description",
         isPublic: true,
     },
 
@@ -345,14 +345,6 @@ const defaultSettings = [
         value: 120,
         type: "number",
         description: "Session timeout in minutes",
-    },
-
-    {
-        category: "security",
-        key: "two_factor_enabled",
-        value: false,
-        type: "boolean",
-        description: "Enable two-factor authentication",
     },
 
     {

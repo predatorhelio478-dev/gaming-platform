@@ -54,6 +54,9 @@ import {
     deactivateAdminUser,
     deleteAdminUser,
     changeAdminUserPassword,
+    manuallyVerifyUserEmail,
+    manuallyVerifyUserMobile,
+    getCurrentAdmin,
 } from "../../../lib/adminApi";
 
 
@@ -175,6 +178,34 @@ export default function UsersPage() {
 
     const [actionLoading, setActionLoading] =
         useState(false);
+
+
+    // ==================================================
+    // CURRENT ADMIN ROLE (manual verify is super_admin-only;
+    // the buttons are hidden for anyone else, but the real
+    // enforcement is server-side regardless)
+    // ==================================================
+
+    const [currentAdminRole, setCurrentAdminRole] =
+        useState(null);
+
+    useEffect(() => {
+
+        let mounted = true;
+
+        getCurrentAdmin()
+            .then((response) => {
+                if (mounted) {
+                    setCurrentAdminRole(response?.admin?.role || null);
+                }
+            })
+            .catch(() => {});
+
+        return () => {
+            mounted = false;
+        };
+
+    }, []);
 
 
     // ==================================================
@@ -2104,6 +2135,77 @@ export default function UsersPage() {
 
 
     // ==================================================
+    // MANUAL EMAIL / MOBILE VERIFICATION (Super Admin only)
+    // ==================================================
+    //
+    // Bypasses OTP entirely - restricted server-side to
+    // super_admin (a normal admin gets a 403 even if this
+    // were called directly). No confirmation dialog since
+    // it's non-destructive and reversible via the same flow
+    // a user would otherwise complete themselves.
+
+    const handleVerifyEmail =
+        async (user) => {
+
+            if (!user?._id) return;
+
+            setActionLoading(true);
+            setError("");
+
+            try {
+
+                await manuallyVerifyUserEmail(user._id);
+
+                if (!mountedRef.current) return;
+
+                await fetchUsers({ page: pagination?.page || 1, showRefreshing: true });
+
+            } catch (requestError) {
+
+                if (mountedRef.current) {
+                    setError(requestError?.message || "Unable to verify email.");
+                }
+
+            } finally {
+
+                if (mountedRef.current) setActionLoading(false);
+
+            }
+
+        };
+
+    const handleVerifyMobile =
+        async (user) => {
+
+            if (!user?._id) return;
+
+            setActionLoading(true);
+            setError("");
+
+            try {
+
+                await manuallyVerifyUserMobile(user._id);
+
+                if (!mountedRef.current) return;
+
+                await fetchUsers({ page: pagination?.page || 1, showRefreshing: true });
+
+            } catch (requestError) {
+
+                if (mountedRef.current) {
+                    setError(requestError?.message || "Unable to verify mobile number.");
+                }
+
+            } finally {
+
+                if (mountedRef.current) setActionLoading(false);
+
+            }
+
+        };
+
+
+    // ==================================================
     // PERMANENTLY DELETE USER
     // ==================================================
     //
@@ -2447,6 +2549,9 @@ export default function UsersPage() {
                     onDelete={handleOpenDeleteModal}
                     actionLoading={actionLoading}
                     onPageChange={handlePageChange}
+                    canManuallyVerify={currentAdminRole === "super_admin"}
+                    onVerifyEmail={handleVerifyEmail}
+                    onVerifyMobile={handleVerifyMobile}
                 />
 
                 {/* =====================================================
@@ -2561,7 +2666,7 @@ export default function UsersPage() {
 
                 <footer className="py-8 text-center text-xs text-slate-700">
 
-                    Gaming Platform Admin Control Center
+                    Gamzzones Admin Control Center
 
                 </footer>
 

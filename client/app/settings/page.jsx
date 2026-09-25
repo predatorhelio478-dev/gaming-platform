@@ -6,11 +6,13 @@ import { UserRound, Mail, Phone, ShieldCheck, KeyRound, Bell } from "lucide-reac
 import UserLayout from "../../components/user/UserLayout";
 import UserPageHeader from "../../components/user/UserPageHeader";
 import useAuth, { setAuthSession, getStoredToken } from "../../lib/useAuth";
+import { maskEmail, maskPhone } from "../../lib/mask";
 import {
     updateMyProfile,
     requestEmailChange,
     requestMobileChange,
     changeMyPassword,
+    requestOtp,
     verifyOtp,
 } from "../../lib/api";
 
@@ -73,6 +75,94 @@ export default function UserSettingsPage() {
             setProfileError(err.message || "Unable to update profile.");
         } finally {
             setProfileSaving(false);
+        }
+    };
+
+    // ==================================================
+    // VERIFY EXISTING EMAIL / MOBILE (separate from Change -
+    // sends an OTP to the CURRENT on-file value, never asks
+    // the user to change anything).
+    // ==================================================
+
+    const [verifyEmailStep, setVerifyEmailStep] = useState("idle"); // idle | otp
+    const [verifyEmailOtp, setVerifyEmailOtp] = useState("");
+    const [verifyEmailBusy, setVerifyEmailBusy] = useState(false);
+    const [verifyEmailMessage, setVerifyEmailMessage] = useState("");
+    const [verifyEmailError, setVerifyEmailError] = useState("");
+
+    const handleStartVerifyEmail = async () => {
+        setVerifyEmailMessage("");
+        setVerifyEmailError("");
+
+        try {
+            setVerifyEmailBusy(true);
+            const result = await requestOtp({ channel: "email", purpose: "verify_email" });
+            setVerifyEmailStep("otp");
+            setVerifyEmailMessage(result?.message || "OTP sent to your email.");
+        } catch (err) {
+            setVerifyEmailError(err.message || "Unable to send verification code.");
+        } finally {
+            setVerifyEmailBusy(false);
+        }
+    };
+
+    const handleConfirmVerifyEmail = async (event) => {
+        event.preventDefault();
+        setVerifyEmailMessage("");
+        setVerifyEmailError("");
+
+        try {
+            setVerifyEmailBusy(true);
+            await verifyOtp({ channel: "email", otp: verifyEmailOtp, purpose: "verify_email" });
+            refreshUser({ emailVerified: true });
+            setVerifyEmailStep("idle");
+            setVerifyEmailOtp("");
+            setVerifyEmailMessage("Email verified successfully.");
+        } catch (err) {
+            setVerifyEmailError(err.message || "Unable to verify code.");
+        } finally {
+            setVerifyEmailBusy(false);
+        }
+    };
+
+    const [verifyMobileStep, setVerifyMobileStep] = useState("idle");
+    const [verifyMobileOtp, setVerifyMobileOtp] = useState("");
+    const [verifyMobileBusy, setVerifyMobileBusy] = useState(false);
+    const [verifyMobileMessage, setVerifyMobileMessage] = useState("");
+    const [verifyMobileError, setVerifyMobileError] = useState("");
+
+    const handleStartVerifyMobile = async () => {
+        setVerifyMobileMessage("");
+        setVerifyMobileError("");
+
+        try {
+            setVerifyMobileBusy(true);
+            const result = await requestOtp({ channel: "mobile", purpose: "verify_mobile" });
+            setVerifyMobileStep("otp");
+            setVerifyMobileMessage(result?.message || "OTP sent to your mobile.");
+        } catch (err) {
+            setVerifyMobileError(err.message || "Unable to send verification code.");
+        } finally {
+            setVerifyMobileBusy(false);
+        }
+    };
+
+    const handleConfirmVerifyMobile = async (event) => {
+        event.preventDefault();
+        setVerifyMobileMessage("");
+        setVerifyMobileError("");
+
+        try {
+            setVerifyMobileBusy(true);
+            await verifyOtp({ channel: "mobile", otp: verifyMobileOtp, purpose: "verify_mobile" });
+            refreshUser({ mobileVerified: true });
+            setVerifyMobileStep("idle");
+            setVerifyMobileOtp("");
+            setVerifyMobileMessage("Mobile number verified successfully.");
+        } catch (err) {
+            setVerifyMobileError(err.message || "Unable to verify code.");
+        } finally {
+            setVerifyMobileBusy(false);
         }
     };
 
@@ -274,7 +364,29 @@ export default function UserSettingsPage() {
                         <VerifiedBadge verified={user?.emailVerified} />
                     </div>
 
-                    <p className="text-sm text-slate-400">{user?.email}</p>
+                    <p className="text-sm text-slate-400">{maskEmail(user?.email)}</p>
+
+                    {!user?.emailVerified && (
+                        <div className="space-y-3 rounded-lg border border-amber-500/10 bg-amber-500/5 p-3">
+                            {verifyEmailError && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">{verifyEmailError}</div>}
+                            {verifyEmailMessage && <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">{verifyEmailMessage}</div>}
+
+                            {verifyEmailStep === "idle" && (
+                                <button type="button" onClick={handleStartVerifyEmail} disabled={verifyEmailBusy} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-500 disabled:opacity-50">
+                                    {verifyEmailBusy ? "Sending..." : "Verify Email"}
+                                </button>
+                            )}
+
+                            {verifyEmailStep === "otp" && (
+                                <form onSubmit={handleConfirmVerifyEmail} className="flex gap-2">
+                                    <input type="text" placeholder="6-digit code" value={verifyEmailOtp} onChange={(e) => setVerifyEmailOtp(e.target.value)} disabled={verifyEmailBusy} className={inputClass} />
+                                    <button type="submit" disabled={verifyEmailBusy} className="whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-500 disabled:opacity-50">
+                                        {verifyEmailBusy ? "Verifying..." : "Confirm"}
+                                    </button>
+                                </form>
+                            )}
+                        </div>
+                    )}
 
                     {emailError && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">{emailError}</div>}
                     {emailMessage && <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">{emailMessage}</div>}
@@ -319,7 +431,29 @@ export default function UserSettingsPage() {
                         <VerifiedBadge verified={user?.mobileVerified} />
                     </div>
 
-                    <p className="text-sm text-slate-400">{user?.mobile || "Not set"}</p>
+                    <p className="text-sm text-slate-400">{user?.mobile ? maskPhone(user.mobile) : "Not set"}</p>
+
+                    {user?.mobile && !user?.mobileVerified && (
+                        <div className="space-y-3 rounded-lg border border-amber-500/10 bg-amber-500/5 p-3">
+                            {verifyMobileError && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">{verifyMobileError}</div>}
+                            {verifyMobileMessage && <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">{verifyMobileMessage}</div>}
+
+                            {verifyMobileStep === "idle" && (
+                                <button type="button" onClick={handleStartVerifyMobile} disabled={verifyMobileBusy} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-500 disabled:opacity-50">
+                                    {verifyMobileBusy ? "Sending..." : "Verify Phone"}
+                                </button>
+                            )}
+
+                            {verifyMobileStep === "otp" && (
+                                <form onSubmit={handleConfirmVerifyMobile} className="flex gap-2">
+                                    <input type="text" placeholder="6-digit code" value={verifyMobileOtp} onChange={(e) => setVerifyMobileOtp(e.target.value)} disabled={verifyMobileBusy} className={inputClass} />
+                                    <button type="submit" disabled={verifyMobileBusy} className="whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-500 disabled:opacity-50">
+                                        {verifyMobileBusy ? "Verifying..." : "Confirm"}
+                                    </button>
+                                </form>
+                            )}
+                        </div>
+                    )}
 
                     {mobileError && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">{mobileError}</div>}
                     {mobileMessage && <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">{mobileMessage}</div>}

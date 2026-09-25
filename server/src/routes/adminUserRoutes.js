@@ -210,6 +210,33 @@ router.post(
 
 
 // ======================================================
+// MANUAL EMAIL/MOBILE VERIFICATION
+// ======================================================
+//
+// POST /api/admin/users/:id/verify-email
+// POST /api/admin/users/:id/verify-mobile
+//
+// Super Admin ONLY - normal admin must not be able to
+// manually verify a user's contact info without OTP.
+//
+// ======================================================
+
+router.post(
+    "/:id/verify-email",
+    adminAuth,
+    requireAdminRole("super_admin"),
+    adminUserController.manuallyVerifyEmail
+);
+
+router.post(
+    "/:id/verify-mobile",
+    adminAuth,
+    requireAdminRole("super_admin"),
+    adminUserController.manuallyVerifyMobile
+);
+
+
+// ======================================================
 // GET USER DETAILS
 // ======================================================
 //

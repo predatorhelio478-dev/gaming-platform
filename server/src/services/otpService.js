@@ -18,6 +18,9 @@ const emailTemplateService =
 const smsService =
     require("./smsService");
 
+const { maskEmail, maskPhone } =
+    require("../utils/maskContact");
+
 
 const CHANNEL_PURPOSES = {
     email: ["verify_email", "change_email", "reset_password"],
@@ -174,9 +177,16 @@ const requestOtp = async (
             const waitSeconds =
                 Math.ceil(cooldown - secondsSinceLastSend);
 
-            throw new Error(
-                `Please wait ${waitSeconds}s before requesting another code.`
-            );
+            const cooldownError =
+                new Error(
+                    `Please wait ${waitSeconds}s before requesting another code.`
+                );
+
+            // Structured, so callers can render a real countdown
+            // instead of parsing the message text.
+            cooldownError.retryAfterSeconds = waitSeconds;
+
+            throw cooldownError;
 
         }
 
@@ -245,6 +255,19 @@ const requestOtp = async (
         reset_password: "Reset your password",
     };
 
+    // "Authenticated" purposes prove the caller already owns the
+    // account (they're acting on their own on-file email/mobile,
+    // or already mid-session for a change) - no enumeration risk,
+    // so a genuine send failure can be surfaced honestly instead
+    // of always claiming success. reset_password is reachable by
+    // an unauthenticated visitor typing any address, so it stays
+    // silent/generic on failure either way (never reveals whether
+    // that address exists or whether delivery actually worked).
+    const isAuthenticatedPurpose =
+        purpose !== "reset_password";
+
+    let sendResult = { sent: true };
+
     if (channel === "email") {
 
         const fallbackText =
@@ -256,26 +279,42 @@ const requestOtp = async (
                   `It expires in ${expiryMinutes} minutes. ` +
                   `Do not share this code with anyone.`;
 
-        await emailTemplateService.sendTemplatedEmail({
-            key: TEMPLATE_KEY_BY_PURPOSE[purpose] || "otp_verify_email",
-            to: cleanTarget,
-            variables: {
-                otp,
-                otp_expiry_minutes: expiryMinutes,
-            },
-            fallbackSubject:
-                FALLBACK_SUBJECTS[purpose] ||
-                "Verify your email",
-            fallbackText,
-        });
+        sendResult =
+            await emailTemplateService.sendTemplatedEmailAwaited({
+                key: TEMPLATE_KEY_BY_PURPOSE[purpose] || "otp_verify_email",
+                to: cleanTarget,
+                variables: {
+                    otp,
+                    otp_expiry_minutes: expiryMinutes,
+                },
+                fallbackSubject:
+                    FALLBACK_SUBJECTS[purpose] ||
+                    "Verify your email",
+                fallbackText,
+            });
 
     } else {
 
-        await smsService.sendSms({
-            to: cleanTarget,
-            message:
-                `Your verification code is ${otp}. It expires in ${expiryMinutes} minutes.`,
-        });
+        sendResult =
+            await smsService.sendSms({
+                to: cleanTarget,
+                message:
+                    `Your verification code is ${otp}. It expires in ${expiryMinutes} minutes.`,
+            });
+
+    }
+
+    // Mobile is deliberately excluded here: no SMS provider is
+    // wired up yet (smsService.sendSms() always reports
+    // sent: false today - see smsService.js), so treating that
+    // as a hard failure would make phone verification impossible
+    // to use/test at all. Once a real provider is plugged in,
+    // this same check will start applying to mobile automatically.
+    if (isAuthenticatedPurpose && channel === "email" && !sendResult?.sent) {
+
+        throw new Error(
+            `We couldn't send the code to your email right now (${sendResult?.reason || "delivery failed"}). Please try again shortly or contact support.`
+        );
 
     }
 
@@ -283,6 +322,11 @@ const requestOtp = async (
     return {
         requested: true,
         expiresInMinutes: Number(expiryMinutes) || 10,
+        resendCooldownSeconds: Number(resendCooldownSeconds) || 60,
+        maskedTarget:
+            channel === "email"
+                ? maskEmail(cleanTarget)
+                : maskPhone(cleanTarget),
     };
 
 };

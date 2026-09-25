@@ -20,6 +20,9 @@ import useAuth
 import useWallet
     from "../../lib/useWallet";
 
+import { handleSessionExpiry }
+    from "../../lib/api";
+
 
 // ======================================================
 // USER LAYOUT
@@ -94,6 +97,51 @@ export default function UserLayout({
         auth.user?.fullName ||
         auth.user?.username ||
         "Player";
+
+
+    // ==================================================
+    // AUTH GUARD
+    // ==================================================
+    //
+    // Every page that renders inside UserLayout is user-
+    // protected (Wallet/Settings/Profile/etc). Without this,
+    // the page shell rendered even when logged out - only a
+    // failed API call deep inside the page would eventually
+    // trigger handleSessionExpiry()'s redirect, so protected
+    // UI could flash before that happened, or never redirect
+    // at all if the page made no API calls. This makes the
+    // guard proactive: no token -> redirect immediately,
+    // render nothing protected in the meantime. Reuses
+    // handleSessionExpiry() (same helper the API 401
+    // interceptor already uses) so the return-URL/redirect-
+    // loop logic lives in exactly one place.
+
+    useEffect(() => {
+
+        if (!auth.isAuthenticated) {
+
+            handleSessionExpiry();
+
+        }
+
+    }, [auth.isAuthenticated]);
+
+
+    if (!auth.isAuthenticated) {
+
+        return (
+
+            <div className="flex min-h-screen items-center justify-center bg-[#070914]">
+
+                <div className="text-sm text-slate-500">
+                    Checking session...
+                </div>
+
+            </div>
+
+        );
+
+    }
 
 
     // ==================================================

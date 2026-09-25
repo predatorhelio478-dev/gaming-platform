@@ -123,11 +123,17 @@ const adminRequest = async (
             }
         );
 
-        throw new Error(
-            data?.message ||
-            data?.error ||
-            `Admin API failed: ${response.status} ${response.statusText}`
-        );
+        const apiError =
+            new Error(
+                data?.message ||
+                data?.error ||
+                `Admin API failed: ${response.status} ${response.statusText}`
+            );
+
+        apiError.status = response.status;
+        apiError.data = data;
+
+        throw apiError;
 
     }
 
@@ -2161,4 +2167,57 @@ export const updateAdminEmailTemplate = async (key, payload) => {
         method: "PATCH",
         body: JSON.stringify(payload),
     });
+};
+
+
+// ==========================================
+// ADMIN ACCOUNT MANAGEMENT (super_admin/admin/operator
+// accounts themselves - distinct from getAdminUsers()
+// above, which manages the User/player collection)
+// ==========================================
+
+export const getAdminAdmins = async ({ page = 1, limit = 20, search = "", role = "all" } = {}) => {
+
+    const params = new URLSearchParams();
+
+    params.set("page", String(page));
+    params.set("limit", String(limit));
+
+    if (search) params.set("search", search);
+    if (role && role !== "all") params.set("role", role);
+
+    return await adminRequest(`/admin/admins?${params.toString()}`, { method: "GET" });
+
+};
+
+export const createAdminAccount = async (payload) => {
+    return await adminRequest("/admin/admins", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+};
+
+export const updateAdminAccount = async (id, payload) => {
+    return await adminRequest(`/admin/admins/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+    });
+};
+
+export const deactivateAdminAccount = async (id) => {
+    return await adminRequest(`/admin/admins/${id}`, { method: "DELETE" });
+};
+
+
+// ==========================================
+// MANUAL USER EMAIL/MOBILE VERIFICATION
+// (Super Admin only - enforced server-side)
+// ==========================================
+
+export const manuallyVerifyUserEmail = async (userId) => {
+    return await adminRequest(`/admin/users/${userId}/verify-email`, { method: "POST" });
+};
+
+export const manuallyVerifyUserMobile = async (userId) => {
+    return await adminRequest(`/admin/users/${userId}/verify-mobile`, { method: "POST" });
 };

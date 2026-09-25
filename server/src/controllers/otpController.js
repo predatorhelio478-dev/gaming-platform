@@ -10,6 +10,9 @@ const { createAuditLog } =
 const notificationService =
     require("../services/notificationService");
 
+const { maskEmail, maskPhone } =
+    require("../utils/maskContact");
+
 
 const getRequestContext = (req) => ({
 
@@ -126,7 +129,10 @@ const requestOtp = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: `Verification code sent to your ${channel}.`,
+            message:
+                result.maskedTarget
+                    ? `OTP sent to ${result.maskedTarget}`
+                    : `Verification code sent to your ${channel}.`,
             ...result,
         });
 
@@ -137,6 +143,9 @@ const requestOtp = async (req, res) => {
             message:
                 error.message ||
                 "Unable to send verification code.",
+            ...(error.retryAfterSeconds
+                ? { retryAfterSeconds: error.retryAfterSeconds }
+                : {}),
         });
 
     }
@@ -175,12 +184,17 @@ const verifyOtp = async (req, res) => {
             ...getRequestContext(req),
         }).catch(() => {});
 
+        const maskedTarget =
+            channel === "email"
+                ? maskEmail(result.target)
+                : maskPhone(result.target);
+
         notificationService
             .notify(
                 userId,
                 "verification",
                 channel === "email" ? "Email verified" : "Mobile verified",
-                `Your ${channel} (${result.target}) has been verified successfully.`,
+                `Your ${channel} (${maskedTarget}) has been verified successfully.`,
                 { channel }
             )
             .catch(() => {});

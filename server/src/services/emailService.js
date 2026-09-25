@@ -23,6 +23,47 @@ let cachedTransporter = null;
 let warnedNotConfigured = false;
 
 /*
+ * Classifies a Nodemailer/SMTP error into one of the specific,
+ * actionable categories called out in the production email
+ * runbook (auth failed / timed out / refused / other), instead
+ * of a generic "Send failed". Only ever reads error.code/
+ * error.responseCode/error.message - none of which nodemailer
+ * populates with the password, so this is safe to log verbatim.
+ */
+const classifySmtpErrorReason = (error) => {
+
+    const code = error?.code;
+    const responseCode = error?.responseCode;
+
+    if (code === "EAUTH" || responseCode === 535) {
+
+        return "SMTP authentication failed - check SMTP_USER/SMTP_PASS";
+
+    }
+
+    if (code === "ETIMEDOUT") {
+
+        return "SMTP connection timed out - check SMTP_HOST/SMTP_PORT and firewall/network rules";
+
+    }
+
+    if (code === "ECONNREFUSED") {
+
+        return "SMTP connection refused - check SMTP_HOST/SMTP_PORT";
+
+    }
+
+    if (code === "ESOCKET" || code === "ECONNRESET") {
+
+        return "SMTP connection was reset - check SMTP_PORT/secure (465 vs 587) and host firewall rules";
+
+    }
+
+    return error?.message || "Send failed";
+
+};
+
+/*
  * Named, per-variable check (never logs a value, just which
  * names are present/missing) so a startup log can say exactly
  * which SMTP_* var is the problem instead of a blanket
@@ -197,19 +238,21 @@ const sendEmail = async ({ to, subject, text, html, heading, ctaText, ctaUrl }) 
 
     } catch (error) {
 
-        // error.message is a Nodemailer/SMTP protocol error
-        // (e.g. "Invalid login: 535 ...", "connect ECONNREFUSED
-        // ...") - it never includes the password/credentials
-        // themselves, so it's safe to both log and return here.
+        // error.message/.code are Nodemailer/SMTP protocol
+        // details (e.g. "Invalid login: 535 ...", ECONNREFUSED)
+        // - never the password/credentials themselves, so it's
+        // safe to both log and return here.
+        const reason =
+            classifySmtpErrorReason(error);
+
         console.error(
-            "[emailService] Send failed:",
-            error.message
+            `[emailService] Send failed: ${reason}${error?.code ? ` (code: ${error.code})` : ""}`
         );
 
 
         return {
             sent: false,
-            reason: error.message || "Send failed",
+            reason,
         };
 
     }
@@ -251,14 +294,16 @@ const verifySmtpConnection = async () => {
 
     } catch (error) {
 
+        const reason =
+            classifySmtpErrorReason(error);
+
         console.error(
-            "[emailService] SMTP connection verification failed:",
-            error.message
+            `[emailService] SMTP connection verification failed: ${reason}${error?.code ? ` (code: ${error.code})` : ""}`
         );
 
         return {
             ok: false,
-            reason: error.message,
+            reason,
         };
 
     }

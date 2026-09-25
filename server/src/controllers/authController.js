@@ -503,6 +503,26 @@ exports.register = async (req, res) => {
 
 
         // ==================================================
+        // TEST WELCOME BALANCE
+        // ==================================================
+        //
+        // register() issues its own token below instead of
+        // going through issueSession() (the frontend logs the
+        // user straight in from this response, it never makes
+        // a separate login() call), so without this the grant
+        // never fired for a normal signup - grantTestWelcomeBalanceIfNeeded
+        // is idempotent (atomic testBalanceGranted:false filter),
+        // so calling it here AND again from issueSession() at a
+        // later login is always safe - only the first call ever
+        // wins the flag flip. Must not require/wait on email
+        // verification - runs regardless of that outcome.
+
+        await grantTestWelcomeBalanceIfNeeded(
+            user._id
+        );
+
+
+        // ==================================================
         // KICK OFF EMAIL VERIFICATION
         // ==================================================
         //
@@ -555,7 +575,7 @@ exports.register = async (req, res) => {
         // ==================================================
 
         const token =
-            generateToken(
+            await generateToken(
                 user._id
             );
 
@@ -695,7 +715,7 @@ const issueSession = async (user) => {
     );
 
     const token =
-        generateToken(
+        await generateToken(
             user._id
         );
 
@@ -933,7 +953,10 @@ exports.resendVerificationOtp = async (
 
             success: true,
 
-            message: `Verification code sent to your ${channel}.`,
+            message:
+                result.maskedTarget
+                    ? `OTP sent to ${result.maskedTarget}`
+                    : `Verification code sent to your ${channel}.`,
 
             ...result,
 
@@ -948,6 +971,10 @@ exports.resendVerificationOtp = async (
             message:
                 error.message ||
                 "Unable to send verification code.",
+
+            ...(error.retryAfterSeconds
+                ? { retryAfterSeconds: error.retryAfterSeconds }
+                : {}),
 
         });
 

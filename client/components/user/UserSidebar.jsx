@@ -8,6 +8,8 @@ import {
     UserPlus,
 } from "lucide-react";
 
+import useSiteSettings from "../../lib/useSiteSettings";
+
 import {
     usePathname,
     useRouter,
@@ -511,6 +513,8 @@ export default function UserSidebar({
 
     const auth = useAuth();
 
+    const { siteName, siteDescription } = useSiteSettings();
+
 
     const userName =
         auth.user?.fullName ||
@@ -772,7 +776,7 @@ export default function UserSidebar({
                                 tracking-tight
                             "
                         >
-                            GAMEZ
+                            {siteName}
                         </p>
 
 
@@ -782,7 +786,7 @@ export default function UserSidebar({
                                text-[10px] uppercase tracking-[0.2em] text-purple-400
                             "
                         >
-                            Gaming Platform
+                            {siteDescription}
                         </p>
 
                     </div>

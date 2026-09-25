@@ -8,6 +8,8 @@ import { registerUser, verifyOtp, requestOtp } from "../../lib/api";
 import { setAuthSession } from "../../lib/useAuth";
 import GuestOnly from "../../components/auth/GuestOnly";
 import AuthShell, { SecurityNote } from "../../components/auth/AuthShell";
+import RateLimitCountdown from "../../components/auth/RateLimitCountdown";
+import useRateLimitCountdown from "../../lib/useRateLimitCountdown";
 
 /*
  * useSearchParams() (here and inside GuestOnly) requires a
@@ -48,7 +50,9 @@ function RegisterForm() {
 
     const [success, setSuccess] = useState("");
 
-    const [resendCooldown, setResendCooldown] = useState(0);
+    const registerLimiter = useRateLimitCountdown("register_rate_limit");
+
+    const resendLimiter = useRateLimitCountdown("register_otp_resend_cooldown");
 
 
     const handleChange = (event) => {
@@ -151,6 +155,19 @@ function RegisterForm() {
                 error
             );
 
+            if (
+                error?.status === 429 &&
+                error?.data?.retryAfterSeconds
+            ) {
+
+                registerLimiter.start(
+                    error.data.retryAfterSeconds
+                );
+
+                return;
+
+            }
+
             setError(
                 error.message ||
                 "Registration failed."
@@ -215,7 +232,7 @@ function RegisterForm() {
 
     const handleResend = async () => {
 
-        if (resendCooldown > 0 || loading) {
+        if (resendLimiter.active || loading) {
 
             return;
 
@@ -227,34 +244,22 @@ function RegisterForm() {
 
         try {
 
-            await requestOtp({
+            const result = await requestOtp({
                 channel: "email",
                 purpose: "verify_email",
             });
 
-            setSuccess("A new code has been sent to your email.");
+            setSuccess(result?.message || "A new code has been sent to your email.");
 
-            setResendCooldown(60);
-
-            const interval = setInterval(() => {
-
-                setResendCooldown((previous) => {
-
-                    if (previous <= 1) {
-
-                        clearInterval(interval);
-
-                        return 0;
-
-                    }
-
-                    return previous - 1;
-
-                });
-
-            }, 1000);
+            resendLimiter.start(result?.resendCooldownSeconds || 60);
 
         } catch (error) {
+
+            if (error?.data?.retryAfterSeconds) {
+
+                resendLimiter.start(error.data.retryAfterSeconds);
+
+            }
 
             setError(error.message || "Unable to resend code.");
 
@@ -329,11 +334,11 @@ function RegisterForm() {
                     <button
                         type="button"
                         onClick={handleResend}
-                        disabled={resendCooldown > 0 || loading}
+                        disabled={resendLimiter.active || loading}
                         className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-5 py-3 text-xs font-semibold text-slate-400 transition hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                        {resendCooldown > 0
-                            ? `Resend code in ${resendCooldown}s`
+                        {resendLimiter.active
+                            ? `Resend code in ${resendLimiter.formatted}`
                             : "Resend code"}
                     </button>
 
@@ -353,7 +358,11 @@ function RegisterForm() {
                 cardIcon={<UserPlus size={17} className="text-purple-400" />}
                 cardTitle="Sign up"
                 cardDescription="Fill in your details to get started."
-                error={error}
+                error={
+                    registerLimiter.active
+                        ? <RateLimitCountdown formatted={registerLimiter.formatted} />
+                        : error
+                }
                 success={success}
                 bottomText="Gaming Platform • Secure Player Access"
                 footer={
@@ -477,10 +486,14 @@ function RegisterForm() {
 
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading || registerLimiter.active}
                         className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-purple-900/20 transition hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {loading ? "Creating Account..." : "Create Account"}
+                        {registerLimiter.active
+                            ? `Try again in ${registerLimiter.formatted}`
+                            : loading
+                                ? "Creating Account..."
+                                : "Create Account"}
                     </button>
 
                 </form>

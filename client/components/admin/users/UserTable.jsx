@@ -41,6 +41,9 @@ export default function UserTable({
     onDelete,
     actionLoading = false,
     onPageChange,
+    canManuallyVerify = false,
+    onVerifyEmail,
+    onVerifyMobile,
 }) {
 
     const page =
@@ -991,6 +994,39 @@ export default function UserTable({
                                                 size={14}
                                             />
 
+                                        </button>
+
+                                    )}
+
+
+                                    {/* =================================================
+                                        MANUAL VERIFY (Super Admin only - OTP bypass)
+                                    ================================================== */}
+
+                                    {canManuallyVerify && !user?.emailVerified && (
+
+                                        <button
+                                            type="button"
+                                            disabled={actionLoading}
+                                            onClick={() => onVerifyEmail?.(user)}
+                                            title="Manually verify email (super admin - no OTP)"
+                                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-2 text-emerald-400 transition hover:bg-emerald-500/[0.10] disabled:cursor-not-allowed disabled:opacity-40"
+                                        >
+                                            <ShieldCheck size={14} />
+                                        </button>
+
+                                    )}
+
+                                    {canManuallyVerify && user?.mobile && !user?.mobileVerified && (
+
+                                        <button
+                                            type="button"
+                                            disabled={actionLoading}
+                                            onClick={() => onVerifyMobile?.(user)}
+                                            title="Manually verify mobile (super admin - no OTP)"
+                                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-2 text-emerald-400 transition hover:bg-emerald-500/[0.10] disabled:cursor-not-allowed disabled:opacity-40"
+                                        >
+                                            <ShieldAlert size={14} />
                                         </button>
 
                                     )}

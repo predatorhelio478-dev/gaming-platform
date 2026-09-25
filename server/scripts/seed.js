@@ -6,6 +6,7 @@ const seedSettings = require("../src/seeders/settingsSeeder");
 const seedEmailTemplates = require("../src/seeders/emailTemplateSeeder");
 const seedFaq = require("../src/seeders/faqSeeder");
 const seedAdmin = require("../src/seeders/adminSeeder");
+const seedRoleAccounts = require("../src/seeders/roleAccountSeeder");
 
 /*
  * ==========================================
@@ -68,6 +69,7 @@ const run = async () => {
         await seedEmailTemplates();
         await seedFaq();
         await seedAdmin();
+        await seedRoleAccounts();
 
         console.log("Production seed complete.");
 

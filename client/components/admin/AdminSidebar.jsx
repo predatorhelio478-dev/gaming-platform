@@ -9,6 +9,7 @@ import {
     Receipt,
     WalletCards,
     Users,
+    ShieldCheck,
     Wallet,
     Settings,
     FileText,
@@ -32,6 +33,7 @@ const menuItems = [
     { label: "FAQ", path: "/admin/faq", icon: HelpCircle },
     { label: "Email Templates", path: "/admin/email-templates", icon: Mail },
     { label: "Users", path: "/admin/users", icon: Users },
+    { label: "Admins", path: "/admin/admins", icon: ShieldCheck },
     { label: "Wallet", path: "/admin/wallet", icon: Wallet },
     { label: "Settings", path: "/admin/settings", icon: Settings },
     { label: "Audit Logs", path: "/admin/audit-logs", icon: FileText },
@@ -102,7 +104,7 @@ export default function AdminSidebar() {
                         </div>
 
                         <div className="ml-3">
-                            <p className="font-black tracking-wide">GAMEZ</p>
+                            <p className="font-black tracking-wide">Gamzzones</p>
                             <p className="text-[10px] uppercase tracking-[0.2em] text-purple-400">
                                 Admin Panel
                             </p>

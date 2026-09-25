@@ -15,10 +15,36 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Gaming Platform - Color Prediction",
-  description: "Play Color Prediction and manage your wallet, bets, and referrals.",
-};
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+// generateMetadata runs server-side per request, so this can read
+// the live site_name/site_description settings instead of the
+// static fallback below - falls back silently (never throws, never
+// blocks the page) if the backend is unreachable at request time.
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const response = await fetch(`${API_URL}/settings/public`, {
+      next: { revalidate: 300 },
+    });
+
+    const data = await response.json();
+    const general = data?.data?.general || {};
+
+    const siteName = general.site_name || "Gamzzones";
+    const siteDescription = general.site_description || "Gaming Platform";
+
+    return {
+      title: `${siteName} - ${siteDescription}`,
+      description: `Play, manage your wallet, bets, and referrals on ${siteName}.`,
+    };
+  } catch {
+    return {
+      title: "Gamzzones - Gaming Platform",
+      description: "Play, manage your wallet, bets, and referrals.",
+    };
+  }
+}
 
 export default function RootLayout({
   children,

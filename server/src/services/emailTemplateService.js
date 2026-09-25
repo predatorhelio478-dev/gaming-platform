@@ -99,6 +99,72 @@ const sendTemplatedEmail = async ({
 
 
 // ==========================================================
+// SEND USING A DB TEMPLATE AND WAIT FOR THE REAL RESULT
+// ==========================================================
+//
+// Same template resolution as sendTemplatedEmail(), but awaits
+// the actual SMTP send and returns { sent, reason? } instead of
+// firing-and-forgetting. Only used where the caller is already
+// awaiting the request anyway (OTP) and the recipient's identity
+// is already proven (their own on-file/authenticated contact),
+// so surfacing a real failure carries no enumeration risk.
+// ==========================================================
+
+const sendTemplatedEmailAwaited = async ({
+    key,
+    to,
+    variables = {},
+    fallbackSubject,
+    fallbackText,
+}) => {
+
+    const template =
+        await EmailTemplate.findOne({ key, isActive: true }).lean();
+
+    if (!template) {
+
+        if (fallbackSubject && fallbackText) {
+
+            return emailService.sendEmail(
+                { to, subject: fallbackSubject, text: fallbackText }
+            );
+
+        }
+
+        return {
+            sent: false,
+            reason: `Template "${key}" not found/inactive and no fallback provided`,
+        };
+
+    }
+
+    const allowedVars = new Set(template.variables || []);
+
+    const subject = substitute(template.subject, variables, allowedVars) || fallbackSubject || template.name;
+
+    const bodyHtml = textToHtmlParagraphs(
+        substitute(template.body, variables, allowedVars)
+    );
+
+    const ctaUrl =
+        template.ctaUrlVariable && allowedVars.has(template.ctaUrlVariable)
+            ? variables[template.ctaUrlVariable] || ""
+            : "";
+
+    return emailService.sendEmail({
+        to,
+        subject,
+        html: bodyHtml,
+        heading: subject,
+        ctaText: template.ctaText || "",
+        ctaUrl,
+        text: substitute(template.body, variables, allowedVars),
+    });
+
+};
+
+
+// ==========================================================
 // ADMIN: LIST / GET / UPDATE
 // ==========================================================
 
@@ -206,6 +272,7 @@ const previewTemplate = async (key) => {
 
 module.exports = {
     sendTemplatedEmail,
+    sendTemplatedEmailAwaited,
     listTemplates,
     getTemplate,
     updateTemplate,

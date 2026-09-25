@@ -20,6 +20,7 @@ import {
 } from "../../lib/api";
 import { getStoredUser } from "../../lib/useAuth";
 import { refreshWallet } from "../../lib/useWallet";
+import useSiteSettings from "../../lib/useSiteSettings";
 
 // ======================================================
 // DEPOSIT PAGE
@@ -42,6 +43,8 @@ const METHOD_OPTIONS = [
 ];
 
 export default function DepositPage() {
+
+    const { siteName } = useSiteSettings();
 
     const [paymentMode, setPaymentMode] = useState("manual");
 
@@ -200,7 +203,7 @@ export default function DepositPage() {
                 amount: Math.round(order.amount * 100),
                 currency: order.currency,
                 order_id: order.orderId,
-                name: "Gaming Platform",
+                name: siteName,
                 description: "Wallet deposit",
                 prefill: {
                     name: user?.fullName || "",

@@ -24,10 +24,26 @@ const adminSchema = new mongoose.Schema(
             trim: true,
         },
 
+        mobile: {
+            type: String,
+            trim: true,
+            default: "",
+        },
+
         password: {
             type: String,
             required: true,
             select: false,
+        },
+
+        emailVerified: {
+            type: Boolean,
+            default: false,
+        },
+
+        phoneVerified: {
+            type: Boolean,
+            default: false,
         },
 
         role: {

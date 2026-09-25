@@ -219,7 +219,7 @@ export default function NotFound() {
                                 text-white
                             "
                         >
-                            GAMEZ
+                            Gamzzones
                         </p>
 
 

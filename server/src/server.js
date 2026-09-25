@@ -76,6 +76,12 @@ gameEngine.startGameEngine()
  * on the first OTP/notification send.
  */
 
+console.log(
+    `[server] NODE_ENV="${process.env.NODE_ENV || "(not set)"}" - dev console fallback for unsent emails is ${
+        process.env.NODE_ENV === "production" ? "DISABLED" : "ENABLED"
+    }. Set NODE_ENV=production on the host (Render/Hostinger env vars) if this is a live deployment.`
+);
+
 emailService.verifySmtpConnection()
     .then((result) => {
 
