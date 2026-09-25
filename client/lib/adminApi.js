@@ -2209,6 +2209,14 @@ export const deactivateAdminAccount = async (id) => {
     return await adminRequest(`/admin/admins/${id}`, { method: "DELETE" });
 };
 
+// Super Admin only - enforced server-side regardless of who calls this.
+export const changeAdminPassword = async (id, newPassword) => {
+    return await adminRequest(`/admin/admins/${id}/password`, {
+        method: "POST",
+        body: JSON.stringify({ newPassword }),
+    });
+};
+
 
 // ==========================================
 // MANUAL USER EMAIL/MOBILE VERIFICATION

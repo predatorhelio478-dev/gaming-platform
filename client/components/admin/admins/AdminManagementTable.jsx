@@ -7,6 +7,7 @@ import {
     Pencil,
     CheckCircle2,
     Ban,
+    KeyRound,
 } from "lucide-react";
 
 import AdminTable, {
@@ -39,9 +40,12 @@ export default function AdminManagementTable({
     onEdit,
     onReactivate,
     onDeactivate,
+    onChangePassword,
     actionLoading = false,
     onPageChange,
 }) {
+
+    const isSuperAdminViewer = currentAdminRole === "super_admin";
 
     const page =
         Number(
@@ -602,7 +606,7 @@ export default function AdminManagementTable({
                                 <div
                                     className="
                                         flex
-                                        min-w-[130px]
+                                        min-w-[170px]
                                         items-center
                                         justify-end
                                         gap-2
@@ -653,6 +657,45 @@ export default function AdminManagementTable({
                                         />
 
                                     </button>
+
+
+                                    {/* =================================================
+                                        CHANGE PASSWORD (Super Admin viewer only)
+                                    ================================================== */}
+
+                                    {isSuperAdminViewer && (
+
+                                        <button
+                                            type="button"
+                                            disabled={actionLoading}
+                                            onClick={() => onChangePassword?.(admin)}
+                                            title="Change password"
+                                            className="
+                                                inline-flex
+                                                cursor-pointer
+                                                items-center
+                                                justify-center
+                                                rounded-lg
+                                                border
+                                                border-blue-500/20
+                                                bg-blue-500/[0.05]
+                                                p-2
+                                                text-blue-400
+                                                transition
+                                                hover:bg-blue-500/[0.10]
+                                                hover:text-blue-300
+                                                disabled:cursor-not-allowed
+                                                disabled:opacity-40
+                                            "
+                                        >
+
+                                            <KeyRound
+                                                size={14}
+                                            />
+
+                                        </button>
+
+                                    )}
 
 
                                     {/* =================================================

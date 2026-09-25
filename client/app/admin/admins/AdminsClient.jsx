@@ -34,11 +34,15 @@ import AdminEditModal
 import DeactivateAdminModal
     from "../../../components/admin/admins/DeactivateAdminModal";
 
+import ChangeAdminPasswordModal
+    from "../../../components/admin/admins/ChangeAdminPasswordModal";
+
 import {
     getAdminAdmins,
     createAdminAccount,
     updateAdminAccount,
     deactivateAdminAccount,
+    changeAdminPassword,
     getCurrentAdmin,
 } from "../../../lib/adminApi";
 
@@ -106,6 +110,17 @@ export default function AdminsPage() {
         useState(false);
 
     const [deactivateTarget, setDeactivateTarget] =
+        useState(null);
+
+
+    // ==================================================
+    // CHANGE PASSWORD MODAL
+    // ==================================================
+
+    const [passwordModalOpen, setPasswordModalOpen] =
+        useState(false);
+
+    const [passwordTarget, setPasswordTarget] =
         useState(null);
 
 
@@ -517,6 +532,40 @@ export default function AdminsPage() {
         };
 
 
+    // ==================================================
+    // CHANGE PASSWORD
+    // ==================================================
+
+    const handleOpenChangePassword =
+        (admin) => {
+            setPasswordTarget(admin);
+            setPasswordModalOpen(true);
+        };
+
+    const handleChangePassword =
+        async (newPassword) => {
+
+            if (!passwordTarget?._id) return;
+
+            setActionLoading(true);
+
+            try {
+
+                await changeAdminPassword(passwordTarget._id, newPassword);
+
+                setPasswordModalOpen(false);
+
+                setPasswordTarget(null);
+
+            } finally {
+
+                setActionLoading(false);
+
+            }
+
+        };
+
+
     const isSuperAdmin =
         me?.role === "super_admin";
 
@@ -745,6 +794,7 @@ export default function AdminsPage() {
                     onEdit={handleOpenEdit}
                     onReactivate={handleReactivate}
                     onDeactivate={handleOpenDeactivate}
+                    onChangePassword={handleOpenChangePassword}
                     actionLoading={actionLoading}
                     onPageChange={handlePageChange}
                 />
@@ -788,6 +838,14 @@ export default function AdminsPage() {
                 admin={deactivateTarget}
                 onClose={() => { setDeactivateModalOpen(false); setDeactivateTarget(null); }}
                 onConfirm={handleConfirmDeactivate}
+                actionLoading={actionLoading}
+            />
+
+            <ChangeAdminPasswordModal
+                open={passwordModalOpen}
+                admin={passwordTarget}
+                onClose={() => { setPasswordModalOpen(false); setPasswordTarget(null); }}
+                onSubmit={handleChangePassword}
                 actionLoading={actionLoading}
             />
 

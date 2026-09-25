@@ -49,4 +49,15 @@ router.delete(
     adminManagementController.deactivateAdmin
 );
 
+// Route-gated to super_admin only, and re-checked independently
+// inside adminManagementService.changeAdminPassword - password is
+// more sensitive than username/email, which already require
+// super_admin.
+router.post(
+    "/:id/password",
+    adminAuth,
+    requireAdminRole("super_admin"),
+    adminManagementController.changeAdminPassword
+);
+
 module.exports = router;

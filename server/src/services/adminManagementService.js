@@ -378,10 +378,69 @@ const deactivateAdmin = async (id, actingAdmin) => {
 };
 
 
+// ======================================================
+// CHANGE ADMIN PASSWORD (Super Admin only, any target
+// including another super_admin, including themselves - e.g.
+// to rotate a shared/original bootstrap admin's password
+// without creating a duplicate account). Restricted to
+// super_admin regardless of target, same security posture as
+// username/email changes - password is at least as sensitive.
+// Enforced here (not just hidden in the UI) so a crafted direct
+// API call can't bypass it either.
+// ======================================================
+
+const changeAdminPassword = async (id, newPassword, actingAdmin) => {
+
+    if (!isValidObjectId(id)) throw new Error("Invalid admin ID.");
+
+    if (actingAdmin.role !== "super_admin") {
+
+        const error = new Error(
+            "Only a super admin can change an admin's password."
+        );
+        error.statusCode = 403;
+        throw error;
+
+    }
+
+    if (!newPassword || String(newPassword).length < 8) {
+
+        throw new Error(
+            "New password must be at least 8 characters."
+        );
+
+    }
+
+    const admin = await Admin.findById(id);
+
+    if (!admin) {
+        const error = new Error("Admin not found.");
+        error.statusCode = 404;
+        throw error;
+    }
+
+    // assertCanModifyTarget is a no-op here in practice (only a
+    // super_admin can even reach this point, and a super_admin is
+    // already allowed to modify another super_admin) - kept for
+    // consistency with every other mutating function in this file.
+    assertCanModifyTarget(actingAdmin, admin);
+
+    admin.password = await bcrypt.hash(String(newPassword), 12);
+    admin.failedLoginAttempts = 0;
+    admin.lockoutUntil = null;
+
+    await admin.save();
+
+    return { admin: buildAdminResponse(admin) };
+
+};
+
+
 module.exports = {
     listAdmins,
     createAdmin,
     updateAdmin,
     deactivateAdmin,
+    changeAdminPassword,
     buildAdminResponse,
 };

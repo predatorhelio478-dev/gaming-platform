@@ -216,9 +216,60 @@ const deactivateAdmin = async (req, res) => {
 };
 
 
+// ======================================================
+// CHANGE ADMIN PASSWORD (Super Admin only)
+// ======================================================
+
+const changeAdminPassword = async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+        if (!id) {
+            return res.status(400).json({ success: false, message: "Admin ID is required." });
+        }
+
+        const { newPassword } = req.body;
+
+        const result = await adminManagementService.changeAdminPassword(id, newPassword, req.admin);
+
+        await createAuditLog({
+            actorType: "admin",
+            actorId: req.admin?._id || null,
+            action: "admin.password_changed",
+            module: "admin_management",
+            key: id,
+            newValue: { username: result.admin?.username },
+            ...getRequestContext(req),
+        }).catch(() => {});
+
+        return res.status(200).json({
+            success: true,
+            message: "Admin password changed successfully.",
+            data: result.admin,
+        });
+
+    } catch (error) {
+
+        console.error("Admin Management Change Password Error:", error);
+
+        const statusCode = error.statusCode || 400;
+
+        return res.status(statusCode).json({
+            success: false,
+            message: error.message || "Unable to change admin password.",
+        });
+
+    }
+
+};
+
+
 module.exports = {
     listAdmins,
     createAdmin,
     updateAdmin,
     deactivateAdmin,
+    changeAdminPassword,
 };
