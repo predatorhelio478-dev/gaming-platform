@@ -16,9 +16,18 @@ const { assertNotLockedOut, recordFailedAttempt, resetLockout, formatDuration } 
 // session_timeout, minutes). Falls back to 1 day if the
 // setting is unset/invalid/unreachable, matching the prior
 // hardcoded behavior - never blocks login over a settings hiccup.
+//
+// Remember Me: a long-lived expiry ("until manual logout" in
+// practice) instead of the session_timeout-driven default.
 // ==========================================
 
-const getAdminTokenExpiresIn = async () => {
+const ADMIN_REMEMBER_ME_EXPIRES_IN = "365d";
+
+const getAdminTokenExpiresIn = async (rememberMe = false) => {
+
+    if (rememberMe) {
+        return ADMIN_REMEMBER_ME_EXPIRES_IN;
+    }
 
     try {
 
@@ -64,6 +73,7 @@ const adminLogin = async (req, res) => {
         const {
             username,
             password,
+            rememberMe,
         } = req.body;
 
         if (!username || !password) {
@@ -188,7 +198,7 @@ const adminLogin = async (req, res) => {
             },
             process.env.JWT_SECRET,
             {
-                expiresIn: await getAdminTokenExpiresIn(),
+                expiresIn: await getAdminTokenExpiresIn(rememberMe === true),
             }
         );
 
@@ -216,6 +226,9 @@ const adminLogin = async (req, res) => {
                 name: admin.name,
                 username: admin.username,
                 email: admin.email,
+                mobile: admin.mobile,
+                emailVerified: admin.emailVerified,
+                phoneVerified: admin.phoneVerified,
                 role: admin.role,
             },
         });
@@ -251,6 +264,9 @@ const getCurrentAdmin = async (req, res) => {
                 name: admin.name,
                 username: admin.username,
                 email: admin.email,
+                mobile: admin.mobile,
+                emailVerified: admin.emailVerified,
+                phoneVerified: admin.phoneVerified,
                 role: admin.role,
                 isActive: admin.isActive,
                 lastLogin: admin.lastLogin,

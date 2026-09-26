@@ -148,6 +148,11 @@ const loginValidators = [
         .notEmpty()
         .withMessage("Password is required."),
 
+    body("rememberMe")
+        .optional()
+        .isBoolean()
+        .withMessage("rememberMe must be true or false."),
+
     handleValidationErrors,
 
 ];
@@ -158,6 +163,11 @@ const adminLoginValidators = [
         .trim()
         .notEmpty()
         .withMessage("Username is required."),
+
+    body("rememberMe")
+        .optional()
+        .isBoolean()
+        .withMessage("rememberMe must be true or false."),
 
     body("password")
         .notEmpty()
@@ -541,10 +551,10 @@ const createTicketValidators = [
         .isIn(SUPPORT_CATEGORIES)
         .withMessage("Invalid category."),
 
-    body("priority")
-        .optional({ checkFalsy: true })
-        .isIn(SUPPORT_PRIORITIES)
-        .withMessage("Invalid priority."),
+    // Priority is never accepted from the user - it's derived
+    // server-side from category (see supportService.createTicket).
+    // No validator for it here on purpose; any `priority` the
+    // client sends is simply ignored by the controller/service.
 
     body("references")
         .optional()
@@ -572,6 +582,12 @@ const ticketStatusValidators = [
         .isIn(SUPPORT_STATUSES)
         .withMessage("Invalid status."),
 
+    body("closingNote")
+        .optional({ checkFalsy: true })
+        .trim()
+        .isLength({ max: 2000 })
+        .withMessage("Closing note is too long (max 2000 characters)."),
+
     handleValidationErrors,
 
 ];
@@ -592,6 +608,27 @@ const ticketAssignValidators = [
         .optional({ nullable: true, checkFalsy: true })
         .isMongoId()
         .withMessage("Invalid admin id."),
+
+    // Required-ness of `note` depends on whether the assignment
+    // actually changes (business logic, enforced in
+    // supportService.assignTicket) - this only checks its shape
+    // when present.
+    body("note")
+        .optional({ checkFalsy: true })
+        .trim()
+        .isLength({ max: 2000 })
+        .withMessage("Note is too long (max 2000 characters)."),
+
+    handleValidationErrors,
+
+];
+
+const ticketNoteValidators = [
+
+    body("note")
+        .trim()
+        .isLength({ min: 1, max: 2000 })
+        .withMessage("Note must be between 1 and 2000 characters."),
 
     handleValidationErrors,
 
@@ -651,6 +688,8 @@ module.exports = {
     ticketPriorityValidators,
 
     ticketAssignValidators,
+
+    ticketNoteValidators,
 
     INDIAN_MOBILE_REGEX,
 

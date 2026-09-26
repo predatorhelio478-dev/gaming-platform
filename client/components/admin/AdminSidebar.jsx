@@ -19,6 +19,7 @@ import {
     LifeBuoy,
     HelpCircle,
     Mail,
+    UserRound,
 } from "lucide-react";
 import { getCurrentAdmin, adminLogout } from "../../lib/adminApi";
 import useSiteSettings from "../../lib/useSiteSettings";
@@ -38,6 +39,7 @@ const menuItems = [
     { label: "Wallet", path: "/admin/wallet", icon: Wallet },
     { label: "Settings", path: "/admin/settings", icon: Settings },
     { label: "Audit Logs", path: "/admin/audit-logs", icon: FileText },
+    { label: "My Profile", path: "/admin/profile", icon: UserRound },
 ];
 
 export default function AdminSidebar() {

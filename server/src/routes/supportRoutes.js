@@ -19,17 +19,17 @@ const {
     getMyTickets,
     getMyTicketById,
     replyToMyTicket,
-    closeMyTicket,
-    reopenMyTicket,
 } = require("../controllers/supportController");
 
 router.use(auth);
 
+// Users can create/reply to their own tickets, but cannot close
+// OR reopen one - both are Admin/Super Admin-only (see
+// adminSupportRoutes.js's POST /tickets/:id/status, which
+// handles both directions).
 router.post("/tickets", supportCreateLimiter, createTicketValidators, createTicket);
 router.get("/tickets", getMyTickets);
 router.get("/tickets/:id", getMyTicketById);
 router.post("/tickets/:id/reply", supportReplyLimiter, ticketReplyValidators, replyToMyTicket);
-router.post("/tickets/:id/close", closeMyTicket);
-router.post("/tickets/:id/reopen", supportReplyLimiter, reopenMyTicket);
 
 module.exports = router;

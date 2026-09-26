@@ -32,11 +32,13 @@ export default function UserDetailDrawer({
     formatCurrency,
     formatDate,
     actionLoading = false,
+    canManuallyVerify = false,
     onClose,
     onEdit,
     onBalance,
     onBlock,
     onUnblock,
+    onRequestVerification,
 }) {
 
     // ==================================================
@@ -751,6 +753,88 @@ export default function UserDetailDrawer({
                                             )
                                         }
                                     />
+
+                                </div>
+
+                            </section>
+
+
+                            {/* ==================================================
+                                CONTACT VERIFICATION
+                            ================================================== */}
+
+                            <section
+                                className="
+                                    rounded-2xl
+                                    border
+                                    border-white/[0.06]
+                                    bg-white/[0.02]
+                                    p-5
+                                "
+                            >
+
+                                <SectionTitle
+                                    icon={ShieldCheck}
+                                    title="Contact Verification"
+                                />
+
+                                <div className="mt-4 space-y-2">
+
+                                    <div className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.05] bg-black/10 p-3">
+
+                                        <div className="flex items-center gap-2">
+                                            <Mail size={14} className="text-slate-600" />
+                                            <span
+                                                className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
+                                                    user?.emailVerified
+                                                        ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                                                        : "border-white/10 bg-white/[0.03] text-slate-500"
+                                                }`}
+                                            >
+                                                Email {user?.emailVerified ? "Verified" : "Unverified"}
+                                            </span>
+                                        </div>
+
+                                        {canManuallyVerify && (
+                                            <button
+                                                type="button"
+                                                disabled={actionLoading}
+                                                onClick={() => onRequestVerification?.(user, "email", !user?.emailVerified)}
+                                                className="text-[11px] font-bold text-purple-400 transition hover:text-purple-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                            >
+                                                {user?.emailVerified ? "Unverify" : "Verify"}
+                                            </button>
+                                        )}
+
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.05] bg-black/10 p-3">
+
+                                        <div className="flex items-center gap-2">
+                                            <Phone size={14} className="text-slate-600" />
+                                            <span
+                                                className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
+                                                    user?.mobileVerified
+                                                        ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                                                        : "border-white/10 bg-white/[0.03] text-slate-500"
+                                                }`}
+                                            >
+                                                Mobile {user?.mobileVerified ? "Verified" : "Unverified"}
+                                            </span>
+                                        </div>
+
+                                        {canManuallyVerify && user?.mobile && (
+                                            <button
+                                                type="button"
+                                                disabled={actionLoading}
+                                                onClick={() => onRequestVerification?.(user, "mobile", !user?.mobileVerified)}
+                                                className="text-[11px] font-bold text-purple-400 transition hover:text-purple-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                            >
+                                                {user?.mobileVerified ? "Unverify" : "Verify"}
+                                            </button>
+                                        )}
+
+                                    </div>
 
                                 </div>
 

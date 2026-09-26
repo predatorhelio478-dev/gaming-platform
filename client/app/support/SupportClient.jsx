@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
-    Mail, Phone, LifeBuoy, Plus, ArrowLeft, Send, Lock, RotateCcw, X,
+    Mail, Phone, LifeBuoy, Plus, ArrowLeft, Send, Lock,
 } from "lucide-react";
 
 import UserLayout from "../../components/user/UserLayout";
@@ -17,8 +17,6 @@ import {
     getMySupportTickets,
     getMySupportTicketById,
     replyToMySupportTicket,
-    closeMySupportTicket,
-    reopenMySupportTicket,
 } from "../../lib/api";
 import { getStoredUser } from "../../lib/useAuth";
 
@@ -32,8 +30,6 @@ const CATEGORIES = [
     "payment", "deposit", "withdrawal", "betting", "wallet",
     "referral", "account", "verification", "technical", "other",
 ];
-
-const PRIORITIES = ["low", "normal", "high", "urgent"];
 
 const PRIORITY_STYLES = {
     low: "border-slate-500/20 bg-slate-500/10 text-slate-400",
@@ -78,7 +74,6 @@ export default function SupportPage() {
     // Create form state
     const [subject, setSubject] = useState("");
     const [category, setCategory] = useState("other");
-    const [priority, setPriority] = useState("normal");
     const [message, setMessage] = useState("");
     const [createBusy, setCreateBusy] = useState(false);
     const [createError, setCreateError] = useState("");
@@ -90,7 +85,6 @@ export default function SupportPage() {
     const [replyMessage, setReplyMessage] = useState("");
     const [replyBusy, setReplyBusy] = useState(false);
     const [replyError, setReplyError] = useState("");
-    const [actionBusy, setActionBusy] = useState(false);
     const messagesEndRef = useRef(null);
 
     useEffect(() => {
@@ -181,13 +175,11 @@ export default function SupportPage() {
             const response = await createSupportTicket({
                 subject: subject.trim(),
                 category,
-                priority,
                 message: message.trim(),
             });
 
             setSubject("");
             setCategory("other");
-            setPriority("normal");
             setMessage("");
 
             if (response?.data?._id) {
@@ -222,30 +214,6 @@ export default function SupportPage() {
             setReplyError(err.message || "Unable to send reply.");
         } finally {
             setReplyBusy(false);
-        }
-    };
-
-    const handleClose = async () => {
-        try {
-            setActionBusy(true);
-            const response = await closeMySupportTicket(selectedTicketId);
-            if (response?.data) setTicket(response.data);
-        } catch (err) {
-            setDetailError(err.message || "Unable to close ticket.");
-        } finally {
-            setActionBusy(false);
-        }
-    };
-
-    const handleReopen = async () => {
-        try {
-            setActionBusy(true);
-            const response = await reopenMySupportTicket(selectedTicketId);
-            if (response?.data) setTicket(response.data);
-        } catch (err) {
-            setDetailError(err.message || "Unable to reopen ticket.");
-        } finally {
-            setActionBusy(false);
         }
     };
 
@@ -393,23 +361,14 @@ export default function SupportPage() {
                                 <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} disabled={createBusy} maxLength={150} placeholder="Brief summary of your issue" className={inputClass} />
                             </div>
 
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-slate-300">Category</label>
-                                    <select value={category} onChange={(e) => setCategory(e.target.value)} disabled={createBusy} className={inputClass}>
-                                        {CATEGORIES.map((c) => (
-                                            <option key={c} value={c} className="capitalize">{c}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-slate-300">Priority</label>
-                                    <select value={priority} onChange={(e) => setPriority(e.target.value)} disabled={createBusy} className={inputClass}>
-                                        {PRIORITIES.map((p) => (
-                                            <option key={p} value={p} className="capitalize">{p}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-slate-300">Category</label>
+                                <select value={category} onChange={(e) => setCategory(e.target.value)} disabled={createBusy} className={inputClass}>
+                                    {CATEGORIES.map((c) => (
+                                        <option key={c} value={c} className="capitalize">{c}</option>
+                                    ))}
+                                </select>
+                                <p className="mt-1 text-[11px] text-slate-600">Priority is set automatically based on category.</p>
                             </div>
 
                             <div>
@@ -464,11 +423,14 @@ export default function SupportPage() {
                                 </div>
 
                                 {ticket.status === "closed" ? (
-                                    <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-4">
-                                        <p className="flex items-center gap-2 text-sm text-slate-500"><Lock size={15} /> This ticket is closed.</p>
-                                        <button type="button" onClick={handleReopen} disabled={actionBusy} className="flex items-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/10 px-4 py-2 text-xs font-bold text-violet-300 transition hover:bg-violet-500/20 disabled:opacity-50">
-                                            <RotateCcw size={14} /> {actionBusy ? "Reopening..." : "Reopen Ticket"}
-                                        </button>
+                                    <div className="mt-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-4">
+                                        <p className="flex items-center gap-2 text-sm text-slate-500"><Lock size={15} /> This ticket is closed. Only our support team can reopen it.</p>
+                                        {ticket.closingNote && (
+                                            <div className="mt-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.05] px-4 py-3">
+                                                <p className="text-[10px] font-bold uppercase tracking-wide text-violet-400">Note from our team</p>
+                                                <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-300">{ticket.closingNote}</p>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <form onSubmit={handleReply} className="mt-4 space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
@@ -476,10 +438,7 @@ export default function SupportPage() {
                                             <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-400">{replyError}</div>
                                         )}
                                         <textarea value={replyMessage} onChange={(e) => setReplyMessage(e.target.value)} disabled={replyBusy} maxLength={2000} rows={3} placeholder="Type your reply..." className={inputClass} />
-                                        <div className="flex items-center justify-between gap-2">
-                                            <button type="button" onClick={handleClose} disabled={actionBusy} className="flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-xs font-bold text-slate-400 transition hover:text-white disabled:opacity-50">
-                                                <X size={14} /> Close Ticket
-                                            </button>
+                                        <div className="flex items-center justify-end gap-2">
                                             <button type="submit" disabled={replyBusy} className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-violet-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50">
                                                 <Send size={14} /> {replyBusy ? "Sending..." : "Send Reply"}
                                             </button>

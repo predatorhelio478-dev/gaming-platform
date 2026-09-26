@@ -13,25 +13,31 @@
  * window and doesn't distinguish 5 failed attempts against one
  * account from 5 failed attempts spread across five.
  *
- * Schedule: the 1st failed attempt is never locked out (typos
- * happen) - starting from the 2nd consecutive failure, each
- * further failure escalates to the next tier below. The lockout
- * duration is capped at 60 seconds (1 minute) - it still
- * escalates with repeated failures (security intact, a bot can
- * never brute-force faster than one guess per lockout tier), it
- * just never makes a legitimate user wait longer than 60s for
- * any single wait. Once the schedule is exhausted, it stays at
- * the last (60s) tier rather than growing further.
+ * Schedule: attempts are grouped in blocks of 5. The first 4
+ * failures in a block are free (typos happen, no lockout) - the
+ * 5th failure in the block triggers that block's lockout. Once
+ * the lockout expires, the next block of 5 failures escalates to
+ * the NEXT tier. Tiers keep growing every 5 failures rather than
+ * capping at a fixed ceiling, up to a 30-minute maximum so a
+ * sustained attack (or a locked-out legitimate user) never waits
+ * longer than that for any single window.
  *
- *   2nd failure  -> 15s
- *   3rd failure  -> 30s
- *   4th failure  -> 45s
- *   5th+ failure -> 60s
+ *   failures 1-4    -> no lockout
+ *   failure 5       -> 30s
+ *   failures 6-9    -> still within the 30s window
+ *   failure 10      -> 1 min
+ *   failure 15      -> 2 min
+ *   failure 20      -> 5 min
+ *   failure 25      -> 10 min
+ *   failure 30      -> 20 min
+ *   failure 35+     -> 30 min (cap)
  *
  * A single successful login resets the counter to zero.
  */
 
-const LOCKOUT_SCHEDULE_SECONDS = [15, 30, 45, 60];
+const LOCKOUT_GROUP_SIZE = 5;
+
+const LOCKOUT_SCHEDULE_SECONDS = [30, 60, 120, 300, 600, 1200, 1800];
 
 const formatDuration = (totalSeconds) => {
 
@@ -81,10 +87,10 @@ const assertNotLockedOut = (doc) => {
 
 // ==========================================================
 // Call on a WRONG password. Increments the failure counter
-// and, from the 2nd consecutive failure onward, sets/extends
-// the escalating lockout window. Returns the new
-// retryAfterSeconds when this attempt just triggered a
-// lockout (undefined on the still-free 1st failure).
+// and, every 5th consecutive failure, sets a new lockout
+// window at the next tier. Returns the new retryAfterSeconds
+// when this attempt just triggered a lockout (undefined on
+// any of the 4 free failures within a block).
 // ==========================================================
 
 const recordFailedAttempt = async (doc) => {
@@ -92,16 +98,16 @@ const recordFailedAttempt = async (doc) => {
     doc.failedLoginAttempts =
         (doc.failedLoginAttempts || 0) + 1;
 
-    const scheduleIndex =
-        doc.failedLoginAttempts - 2;
-
     let retryAfterSeconds;
 
-    if (scheduleIndex >= 0) {
+    if (doc.failedLoginAttempts % LOCKOUT_GROUP_SIZE === 0) {
+
+        const tierIndex =
+            (doc.failedLoginAttempts / LOCKOUT_GROUP_SIZE) - 1;
 
         const seconds =
             LOCKOUT_SCHEDULE_SECONDS[
-                Math.min(scheduleIndex, LOCKOUT_SCHEDULE_SECONDS.length - 1)
+                Math.min(tierIndex, LOCKOUT_SCHEDULE_SECONDS.length - 1)
             ];
 
         doc.lockoutUntil =

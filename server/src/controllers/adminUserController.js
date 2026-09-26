@@ -348,6 +348,8 @@ const updateUser = async (
 
             status,
 
+            notifyEmail,
+
         } = req.body;
 
 
@@ -369,6 +371,8 @@ const updateUser = async (
                     role,
 
                     status,
+
+                    notifyEmail: notifyEmail === true,
 
                 }
 
@@ -1182,12 +1186,13 @@ const getUserStats = async (
 
 
 // ======================================================
-// MANUAL EMAIL/MOBILE VERIFICATION (Super Admin only)
+// MANUAL EMAIL/MOBILE VERIFY *OR* UNVERIFY (Super Admin only)
 // ======================================================
 //
 // Route-gated to super_admin via requireAdminRole - a normal
 // admin must not be able to reach this at all. Bypasses OTP
 // entirely; every call is audit-logged with who/target/what.
+// Body: { verified?: boolean (default true), notifyEmail?: boolean }
 // ======================================================
 
 const manuallyVerifyEmail = async (req, res) => {
@@ -1196,17 +1201,26 @@ const manuallyVerifyEmail = async (req, res) => {
 
         const { id } = req.params;
 
-        const result = await adminUserService.manuallyVerifyContact(id, "email");
+        const { verified, notifyEmail } = req.body || {};
+
+        const desired = verified !== false;
+
+        const result = await adminUserService.manuallyVerifyContact(
+            id,
+            "email",
+            desired,
+            notifyEmail === true
+        );
 
         if (!result.alreadyVerified) {
 
             await createAuditLog({
                 actorType: "admin",
                 actorId: req.admin?._id || null,
-                action: "user.email_manually_verified",
+                action: desired ? "user.email_manually_verified" : "user.email_manually_unverified",
                 module: "users",
                 key: id,
-                newValue: { emailVerified: true },
+                newValue: { emailVerified: desired },
                 ...getRequestContext(req),
             }).catch(() => {});
 
@@ -1216,8 +1230,8 @@ const manuallyVerifyEmail = async (req, res) => {
             success: true,
             message:
                 result.alreadyVerified
-                    ? "This user's email is already verified."
-                    : "User's email marked as verified.",
+                    ? `This user's email is already ${desired ? "verified" : "unverified"}.`
+                    : `User's email marked as ${desired ? "verified" : "unverified"}.`,
             data: result.user,
         });
 
@@ -1229,7 +1243,7 @@ const manuallyVerifyEmail = async (req, res) => {
 
         return res.status(statusCode).json({
             success: false,
-            message: error.message || "Unable to verify email.",
+            message: error.message || "Unable to update email verification.",
         });
 
     }
@@ -1242,17 +1256,26 @@ const manuallyVerifyMobile = async (req, res) => {
 
         const { id } = req.params;
 
-        const result = await adminUserService.manuallyVerifyContact(id, "mobile");
+        const { verified, notifyEmail } = req.body || {};
+
+        const desired = verified !== false;
+
+        const result = await adminUserService.manuallyVerifyContact(
+            id,
+            "mobile",
+            desired,
+            notifyEmail === true
+        );
 
         if (!result.alreadyVerified) {
 
             await createAuditLog({
                 actorType: "admin",
                 actorId: req.admin?._id || null,
-                action: "user.mobile_manually_verified",
+                action: desired ? "user.mobile_manually_verified" : "user.mobile_manually_unverified",
                 module: "users",
                 key: id,
-                newValue: { mobileVerified: true },
+                newValue: { mobileVerified: desired },
                 ...getRequestContext(req),
             }).catch(() => {});
 
@@ -1262,8 +1285,8 @@ const manuallyVerifyMobile = async (req, res) => {
             success: true,
             message:
                 result.alreadyVerified
-                    ? "This user's mobile number is already verified."
-                    : "User's mobile number marked as verified.",
+                    ? `This user's mobile number is already ${desired ? "verified" : "unverified"}.`
+                    : `User's mobile number marked as ${desired ? "verified" : "unverified"}.`,
             data: result.user,
         });
 
@@ -1275,7 +1298,7 @@ const manuallyVerifyMobile = async (req, res) => {
 
         return res.status(statusCode).json({
             success: false,
-            message: error.message || "Unable to verify mobile number.",
+            message: error.message || "Unable to update mobile verification.",
         });
 
     }

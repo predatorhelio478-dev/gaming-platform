@@ -191,6 +191,81 @@ const supportTicketSchema = new mongoose.Schema(
             type: Date,
             default: null,
         },
+
+        // Shown to the user on their own ticket screen when the
+        // ticket is closed - the ONLY admin-authored field the
+        // user is ever allowed to see (see supportService.js's
+        // listMyTickets/getMyTicketById, which explicitly exclude
+        // internalNote/internalNoteHistory).
+        closingNote: {
+            type: String,
+            default: "",
+            trim: true,
+            maxlength: 2000,
+        },
+
+        // Internal-only note tied to the current assignment -
+        // never returned to the ticket owner. A note is required
+        // whenever the assignment actually changes (see
+        // supportService.js's assignTicket), and can also be
+        // edited independently of assignment (updateInternalNote).
+        // Every actual change is appended to internalNoteHistory
+        // below, visible to any admin/super admin.
+        internalNote: {
+
+            text: {
+                type: String,
+                default: "",
+                trim: true,
+                maxlength: 2000,
+            },
+
+            updatedBy: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Admin",
+                default: null,
+            },
+
+            updatedByName: {
+                type: String,
+                default: "",
+            },
+
+            updatedAt: {
+                type: Date,
+                default: null,
+            },
+
+        },
+
+        internalNoteHistory: {
+            type: [
+                {
+                    previousText: {
+                        type: String,
+                        default: "",
+                    },
+                    newText: {
+                        type: String,
+                        default: "",
+                    },
+                    changedBy: {
+                        type: mongoose.Schema.Types.ObjectId,
+                        ref: "Admin",
+                        default: null,
+                    },
+                    changedByName: {
+                        type: String,
+                        default: "",
+                    },
+                    changedAt: {
+                        type: Date,
+                        default: Date.now,
+                    },
+                },
+            ],
+            default: [],
+        },
     },
     {
         timestamps: true,

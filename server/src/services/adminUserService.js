@@ -23,6 +23,89 @@ const generateTransactionId =
 const walletService =
     require("./walletService");
 
+const emailTemplateService =
+    require("./emailTemplateService");
+
+const settingsService =
+    require("./settingsService");
+
+
+// ======================================================
+// NOTIFY USER OF AN ADMIN-INITIATED CONTACT/VERIFICATION
+// CHANGE (best-effort - never blocks or fails the caller's
+// update/verify action if the lookup or send fails)
+// ======================================================
+
+const notifyContactChangeByEmail = async (user, { kind, channel, value }) => {
+
+    try {
+
+        if (!user?.email) {
+            return;
+        }
+
+        const siteName =
+            await settingsService.getValue(
+                "general",
+                "site_name",
+                "Gaming Platform"
+            );
+
+        const userName =
+            user.fullName || user.username;
+
+        const channelLabel =
+            channel === "email" ? "email address" : "mobile number";
+
+        if (kind === "updated") {
+
+            await emailTemplateService.sendTemplatedEmail({
+                key: "admin_contact_updated",
+                to: user.email,
+                variables: {
+                    user_name: userName,
+                    channel: channelLabel,
+                    new_value: value,
+                    site_name: siteName,
+                },
+                fallbackSubject: `Your ${channelLabel} has been updated`,
+                fallbackText:
+                    `Hi ${userName},\n\n` +
+                    `Your ${channelLabel} on ${siteName} has been updated by an administrator to: ${value}.\n\n` +
+                    `If you did not expect this change, please contact support immediately.`,
+            });
+
+        } else {
+
+            await emailTemplateService.sendTemplatedEmail({
+                key: "admin_verification_changed",
+                to: user.email,
+                variables: {
+                    user_name: userName,
+                    channel: channelLabel,
+                    status: value,
+                    site_name: siteName,
+                },
+                fallbackSubject: `Your ${channelLabel} verification status has changed`,
+                fallbackText:
+                    `Hi ${userName},\n\n` +
+                    `Your ${channelLabel} on ${siteName} has been marked as ${value} by an administrator.\n\n` +
+                    `If you have any questions, please contact support.`,
+            });
+
+        }
+
+    } catch (error) {
+
+        console.error(
+            `[adminUserService] Contact-change notification email failed for user ${user?._id}:`,
+            error.message
+        );
+
+    }
+
+};
+
 
 // ======================================================
 // HELPERS
@@ -2006,6 +2089,7 @@ const updateUser = async (
         mobile,
         role,
         status,
+        notifyEmail,
     } = {}
 ) => {
 
@@ -2201,6 +2285,10 @@ const updateUser = async (
     }
 
 
+    let emailChanged = false;
+
+    let mobileChanged = false;
+
     if (
         normalizedEmail !== undefined
     ) {
@@ -2216,6 +2304,8 @@ const updateUser = async (
         if (normalizedEmail !== user.email) {
 
             user.emailVerified = false;
+
+            emailChanged = true;
 
         }
 
@@ -2234,6 +2324,8 @@ const updateUser = async (
         if (cleanMobile !== user.mobile) {
 
             user.mobileVerified = false;
+
+            mobileChanged = true;
 
         }
 
@@ -2259,6 +2351,35 @@ const updateUser = async (
 
 
     await user.save();
+
+
+    // Notification is entirely best-effort and never blocks or
+    // reverts the update above - the user record is saved either
+    // way, regardless of whether notifyEmail was checked or the
+    // send itself succeeds.
+    if (notifyEmail === true) {
+
+        if (emailChanged) {
+
+            await notifyContactChangeByEmail(user, {
+                kind: "updated",
+                channel: "email",
+                value: user.email,
+            });
+
+        }
+
+        if (mobileChanged) {
+
+            await notifyContactChangeByEmail(user, {
+                kind: "updated",
+                channel: "mobile",
+                value: user.mobile,
+            });
+
+        }
+
+    }
 
 
     const updatedUser =
@@ -2698,14 +2819,15 @@ const getUserStats = async () => {
 
 
 // ======================================================
-// MANUAL EMAIL/MOBILE VERIFICATION (Super Admin only -
-// caller/route enforces the role check; this only enforces
-// the data-integrity rules: user must exist, mobile must
-// actually be on file to "verify" it, and this never sends
-// or checks an OTP - it's a direct, audited override.)
+// MANUAL EMAIL/MOBILE VERIFY *OR* UNVERIFY (Super Admin
+// only - caller/route enforces the role check; this only
+// enforces the data-integrity rules: user must exist, mobile
+// must actually be on file to touch its verified flag either
+// way, and this never sends or checks an OTP - it's a direct,
+// audited override in either direction.)
 // ======================================================
 
-const manuallyVerifyContact = async (id, channel) => {
+const manuallyVerifyContact = async (id, channel, verified = true, notifyEmail = false) => {
 
     if (!isValidObjectId(id)) {
         throw new Error("Invalid user ID.");
@@ -2714,6 +2836,8 @@ const manuallyVerifyContact = async (id, channel) => {
     if (!["email", "mobile"].includes(channel)) {
         throw new Error("Invalid verification channel.");
     }
+
+    const desired = verified === true;
 
     const user = await User.findById(id);
 
@@ -2729,16 +2853,30 @@ const manuallyVerifyContact = async (id, channel) => {
 
     const field = channel === "email" ? "emailVerified" : "mobileVerified";
 
-    const alreadyVerified = user[field] === true;
+    const alreadyVerified = user[field] === desired;
 
     if (!alreadyVerified) {
-        user[field] = true;
+        user[field] = desired;
         await user.save();
+    }
+
+    // Best-effort, never blocks/reverts the change above - only
+    // fires when the state actually flipped, so re-clicking an
+    // already-verified/unverified toggle never spams an email.
+    if (notifyEmail === true && !alreadyVerified) {
+
+        await notifyContactChangeByEmail(user, {
+            kind: "verification",
+            channel,
+            value: desired ? "Verified" : "Unverified",
+        });
+
     }
 
     return {
         user: buildUserResponse(user),
         alreadyVerified,
+        verified: desired,
     };
 
 };

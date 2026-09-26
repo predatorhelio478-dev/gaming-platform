@@ -24,11 +24,20 @@ const GameRound =
 const Admin =
     require("../models/Admin");
 
+const User =
+    require("../models/User");
+
 const { createAuditLog } =
     require("./auditLogService");
 
 const notificationService =
     require("./notificationService");
+
+const emailTemplateService =
+    require("./emailTemplateService");
+
+const settingsService =
+    require("./settingsService");
 
 
 const REFERENCE_MODELS = {
@@ -50,6 +59,82 @@ const generateTicketNumber = () => {
         Math.random().toString(36).slice(2, 10).toUpperCase();
 
     return `TKT-${random}`;
+
+};
+
+
+// ==========================================================
+// PRIORITY IS DERIVED FROM CATEGORY, NEVER USER-CHOSEN
+// ==========================================================
+//
+// Users no longer pick a priority when creating a ticket (the
+// picker was removed from the UI, and the controller no longer
+// forwards any client-supplied `priority` here either) - this
+// is the single source of truth for the starting priority,
+// enforced server-side so it can't be bypassed by calling the
+// API directly with a `priority` field.
+
+const CATEGORY_PRIORITY_MAP = {
+    technical: "urgent",
+    payment: "urgent",
+    deposit: "urgent",
+    withdrawal: "high",
+    betting: "high",
+    wallet: "high",
+};
+
+const getAutoPriorityForCategory = (category) => {
+
+    return CATEGORY_PRIORITY_MAP[category] || "normal";
+
+};
+
+
+// ==========================================================
+// INTERNAL NOTE (admin/super admin only - never returned to
+// the ticket owner). Shared by assignTicket (a note is
+// mandatory whenever the assignment changes) and
+// updateInternalNote (editing the note independently of
+// assignment) - every actual text change is appended to
+// internalNoteHistory, regardless of which caller triggered it.
+// ==========================================================
+
+const applyInternalNoteChange = (ticket, newText, actorAdmin) => {
+
+    const cleanNew =
+        String(newText || "").trim();
+
+    const previousText =
+        ticket.internalNote?.text || "";
+
+    if (cleanNew === previousText) {
+
+        return false;
+
+    }
+
+    const actorName =
+        actorAdmin?.name || actorAdmin?.username || "";
+
+    const actorId =
+        actorAdmin?._id || actorAdmin?.id || null;
+
+    ticket.internalNoteHistory.push({
+        previousText,
+        newText: cleanNew,
+        changedBy: actorId,
+        changedByName: actorName,
+        changedAt: new Date(),
+    });
+
+    ticket.internalNote = {
+        text: cleanNew,
+        updatedBy: actorId,
+        updatedByName: actorName,
+        updatedAt: new Date(),
+    };
+
+    return true;
 
 };
 
@@ -142,7 +227,6 @@ const createTicket = async (
     {
         subject,
         category = "other",
-        priority = "normal",
         message,
         references = [],
     }
@@ -192,7 +276,7 @@ const createTicket = async (
                 user: userId,
                 subject: cleanSubject,
                 category,
-                priority,
+                priority: getAutoPriorityForCategory(category),
                 status: "open",
                 references: validatedReferences,
                 messages: [
@@ -269,7 +353,7 @@ const listMyTickets = async (
     const [tickets, total] = await Promise.all([
 
         SupportTicket.find(filter)
-            .select("-messages")
+            .select("-messages -internalNote -internalNoteHistory")
             .sort({ lastMessageAt: -1 })
             .skip((safePage - 1) * safeLimit)
             .limit(safeLimit)
@@ -311,6 +395,7 @@ const getMyTicketById = async (
 
     const ticket =
         await SupportTicket.findOne({ _id: ticketId, user: userId })
+            .select("-internalNote -internalNoteHistory")
             .populate("assignedAdmin", "name username");
 
     if (!ticket) {
@@ -417,82 +502,10 @@ const userReplyToTicket = async (
 };
 
 
-// ==========================================================
-// USER CLOSE TICKET
-// ==========================================================
-
-const closeTicketByUser = async (
-    userId,
-    ticketId
-) => {
-
-    const ticket =
-        await SupportTicket.findOne({ _id: ticketId, user: userId });
-
-    if (!ticket) {
-
-        throw new Error("Ticket not found.");
-
-    }
-
-    if (ticket.status === "closed") {
-
-        return ticket;
-
-    }
-
-    ticket.status = "closed";
-    ticket.closedAt = new Date();
-
-    await ticket.save();
-
-    return ticket;
-
-};
-
-
-// ==========================================================
-// USER REOPEN TICKET
-// ==========================================================
-
-const reopenTicketByUser = async (
-    userId,
-    ticketId
-) => {
-
-    const ticket =
-        await SupportTicket.findOne({ _id: ticketId, user: userId });
-
-    if (!ticket) {
-
-        throw new Error("Ticket not found.");
-
-    }
-
-    if (ticket.status !== "closed") {
-
-        return ticket;
-
-    }
-
-    ticket.status = "pending";
-    ticket.closedAt = null;
-    ticket.adminUnreadCount += 1;
-
-    await ticket.save();
-
-    notificationService
-        .notifyAdmins(
-            "support",
-            "Ticket reopened",
-            `Ticket ${ticket.ticketNumber} was reopened by the user.`,
-            { ticketId: String(ticket._id), ticketNumber: ticket.ticketNumber }
-        )
-        .catch(() => {});
-
-    return ticket;
-
-};
+// Closing AND reopening a ticket are both Admin/Super
+// Admin-only - see changeTicketStatus below. A user can never
+// reopen their own closed ticket (there is deliberately no
+// user-facing reopen route/controller/service function).
 
 
 // ==========================================================
@@ -692,7 +705,8 @@ const adminReplyToTicket = async (
 const changeTicketStatus = async (
     adminId,
     ticketId,
-    status
+    status,
+    { closingNote } = {}
 ) => {
 
     if (!SupportTicket.STATUSES.includes(status)) {
@@ -731,11 +745,20 @@ const changeTicketStatus = async (
 
         ticket.closedAt = new Date();
 
+        // Visible to the ticket owner on their own Support page -
+        // the only admin-authored field they're ever shown.
+        ticket.closingNote =
+            String(closingNote || "").trim();
+
     }
 
     if (oldStatus === "closed" && status !== "closed") {
 
         ticket.closedAt = null;
+
+        // A fresh reopen starts without a stale closing note
+        // from the ticket's previous closure.
+        ticket.closingNote = "";
 
     }
 
@@ -763,6 +786,67 @@ const changeTicketStatus = async (
                 { ticketId: String(ticket._id) }
             )
             .catch(() => {});
+
+    }
+
+    // Ticket closed by an admin/super admin - also email the user
+    // (in addition to the in-app notification above). Best-effort:
+    // never throws back into the status-change request if the
+    // user lookup or send fails.
+    if (status === "closed") {
+
+        (async () => {
+
+            try {
+
+                const ticketUser =
+                    await User.findById(ticket.user).select(
+                        "email fullName username"
+                    );
+
+                if (!ticketUser?.email) {
+
+                    return;
+
+                }
+
+                const siteName =
+                    await settingsService.getValue(
+                        "general",
+                        "site_name",
+                        "Gaming Platform"
+                    );
+
+                const userName =
+                    ticketUser.fullName || ticketUser.username;
+
+                await emailTemplateService.sendTemplatedEmail({
+                    key: "support_ticket_closed",
+                    to: ticketUser.email,
+                    variables: {
+                        user_name: userName,
+                        ticket_number: ticket.ticketNumber,
+                        ticket_subject: ticket.subject,
+                        site_name: siteName,
+                    },
+                    fallbackSubject: `Your support ticket ${ticket.ticketNumber} has been closed`,
+                    fallbackText:
+                        `Hi ${userName},\n\n` +
+                        `Your support ticket "${ticket.subject}" (${ticket.ticketNumber}) has been closed by our support team.\n\n` +
+                        (ticket.closingNote ? `Note from our team: ${ticket.closingNote}\n\n` : "") +
+                        `If you believe this was closed in error or need further help, you can open a new ticket on ${siteName} or reply to our support team - only an admin can reopen a closed ticket.`,
+                });
+
+            } catch (error) {
+
+                console.error(
+                    `[supportService] Ticket-closed email failed for ticket ${ticket.ticketNumber}:`,
+                    error.message
+                );
+
+            }
+
+        })();
 
     }
 
@@ -842,11 +926,23 @@ const changeTicketPriority = async (
 // ==========================================================
 // ADMIN: ASSIGN TICKET
 // ==========================================================
+//
+// `actorAdmin` is the full acting Admin doc (not just an id) -
+// its name is recorded on the internal note/history. A note is
+// REQUIRED whenever the assignment actually changes (including
+// to/from unassigned) - this is the enforcement point that
+// can't be bypassed by skipping the UI, since it throws before
+// anything is saved. There is deliberately no more implicit
+// "omit adminId to self-assign" behavior - the caller must
+// always pass an explicit `assignToAdminId` (or null/omitted to
+// unassign).
+// ==========================================================
 
 const assignTicket = async (
-    adminId,
+    actorAdmin,
     ticketId,
-    assignToAdminId
+    assignToAdminId,
+    note
 ) => {
 
     const ticket =
@@ -891,19 +987,30 @@ const assignTicket = async (
 
     }
 
+    const cleanNote =
+        String(note || "").trim();
+
+    if (!cleanNote) {
+
+        throw new Error("A note is required before assigning this ticket.");
+
+    }
+
     ticket.assignedAdmin = targetAdmin ? targetAdmin._id : null;
+
+    applyInternalNoteChange(ticket, cleanNote, actorAdmin);
 
     await ticket.save();
 
     await createAuditLog({
         actorType: "admin",
-        actorId: adminId,
+        actorId: actorAdmin?._id || actorAdmin?.id || null,
         action: "support.ticket_assigned",
         module: "support",
         key: String(ticket._id),
         oldValue: previousAssignee,
         newValue: newAssignee,
-        metadata: { ticketNumber: ticket.ticketNumber },
+        metadata: { ticketNumber: ticket.ticketNumber, note: cleanNote },
     }).catch(() => {});
 
     if (targetAdmin) {
@@ -920,6 +1027,54 @@ const assignTicket = async (
     }
 
     return { ticket, changed: true };
+
+};
+
+
+// ==========================================================
+// ADMIN: UPDATE INTERNAL NOTE (independent of assignment)
+// ==========================================================
+//
+// Lets an admin/super admin edit the ticket's internal note at
+// any time, not just while assigning - every actual text change
+// is appended to internalNoteHistory the same way assignTicket's
+// note does, so both paths produce one consistent audit trail.
+
+const updateInternalNote = async (
+    actorAdmin,
+    ticketId,
+    note
+) => {
+
+    const ticket =
+        await SupportTicket.findById(ticketId);
+
+    if (!ticket) {
+
+        throw new Error("Ticket not found.");
+
+    }
+
+    const changed =
+        applyInternalNoteChange(ticket, note, actorAdmin);
+
+    if (changed) {
+
+        await ticket.save();
+
+        await createAuditLog({
+            actorType: "admin",
+            actorId: actorAdmin?._id || actorAdmin?.id || null,
+            action: "support.note_updated",
+            module: "support",
+            key: String(ticket._id),
+            newValue: ticket.internalNote?.text || "",
+            metadata: { ticketNumber: ticket.ticketNumber },
+        }).catch(() => {});
+
+    }
+
+    return { ticket, changed };
 
 };
 
@@ -958,13 +1113,12 @@ module.exports = {
     listMyTickets,
     getMyTicketById,
     userReplyToTicket,
-    closeTicketByUser,
-    reopenTicketByUser,
     listAdminTickets,
     getAdminTicketById,
     adminReplyToTicket,
     changeTicketStatus,
     changeTicketPriority,
     assignTicket,
+    updateInternalNote,
     getTicketStats,
 };

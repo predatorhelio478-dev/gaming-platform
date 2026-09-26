@@ -28,9 +28,11 @@ export default function UserEditModal({
     open = false,
     user = null,
     actionLoading = false,
+    canManuallyVerify = false,
     onClose,
     onSubmit,
     onChangePassword,
+    onRequestVerification,
 }) {
 
     const [formData, setFormData] =
@@ -48,6 +50,15 @@ export default function UserEditModal({
 
     const [error, setError] =
         useState("");
+
+
+    // ==================================================
+    // NOTIFY USER ON CONTACT CHANGE (only takes effect if
+    // email and/or mobile actually changes in this submit)
+    // ==================================================
+
+    const [notifyEmail, setNotifyEmail] =
+        useState(false);
 
 
     // ==================================================
@@ -124,6 +135,8 @@ export default function UserEditModal({
 
 
         setError("");
+
+        setNotifyEmail(false);
 
         setNewPassword("");
 
@@ -264,6 +277,8 @@ export default function UserEditModal({
 
                 status:
                     formData.status,
+
+                notifyEmail,
 
             });
 
@@ -639,6 +654,21 @@ export default function UserEditModal({
                         </Field>
 
 
+                        {/* NOTIFY USER OF CONTACT CHANGE */}
+
+                        <label className="-mt-1 flex items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.015] px-4 py-3 text-xs font-medium text-slate-400 select-none">
+                            <input
+                                type="checkbox"
+                                checked={notifyEmail}
+                                onChange={(event) => setNotifyEmail(event.target.checked)}
+                                disabled={actionLoading}
+                                className="h-3.5 w-3.5 shrink-0 rounded border-white/20 bg-[#070914] text-purple-500 focus:ring-purple-500/40 disabled:cursor-not-allowed"
+                            />
+                            Send notification email to user
+                            <span className="text-slate-600">(only if email or mobile is changed)</span>
+                        </label>
+
+
                         {/* ROLE */}
 
                         <Field
@@ -709,14 +739,12 @@ export default function UserEditModal({
                     </div>
 
 
-                    {/* VERIFICATION STATUS (read-only) */}
+                    {/* VERIFICATION STATUS */}
 
                     <div
                         className="
                             mt-5
-                            flex
-                            items-center
-                            gap-4
+                            space-y-2
                             rounded-xl
                             border
                             border-white/[0.06]
@@ -746,12 +774,14 @@ export default function UserEditModal({
                                     text-slate-600
                                 "
                             >
-                                Only a real OTP can verify an account - this can&apos;t be edited here.
+                                {canManuallyVerify
+                                    ? "Email and mobile verification are independent - a real OTP is never sent for a manual override."
+                                    : "Only a Super Admin can manually verify/unverify - a real OTP is never sent for a manual override."}
                             </p>
 
                         </div>
 
-                        <div className="ml-auto flex gap-2">
+                        <div className="flex items-center justify-between gap-2">
 
                             <span
                                 className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
@@ -763,6 +793,21 @@ export default function UserEditModal({
                                 Email {user?.emailVerified ? "Verified" : "Unverified"}
                             </span>
 
+                            {canManuallyVerify && (
+                                <button
+                                    type="button"
+                                    disabled={actionLoading}
+                                    onClick={() => onRequestVerification?.(user, "email", !user?.emailVerified)}
+                                    className="text-[11px] font-bold text-purple-400 transition hover:text-purple-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    {user?.emailVerified ? "Unverify" : "Verify"}
+                                </button>
+                            )}
+
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2">
+
                             <span
                                 className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
                                     user?.mobileVerified
@@ -772,6 +817,17 @@ export default function UserEditModal({
                             >
                                 Mobile {user?.mobileVerified ? "Verified" : "Unverified"}
                             </span>
+
+                            {canManuallyVerify && user?.mobile && (
+                                <button
+                                    type="button"
+                                    disabled={actionLoading}
+                                    onClick={() => onRequestVerification?.(user, "mobile", !user?.mobileVerified)}
+                                    className="text-[11px] font-bold text-purple-400 transition hover:text-purple-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    {user?.mobileVerified ? "Unverify" : "Verify"}
+                                </button>
+                            )}
 
                         </div>
 

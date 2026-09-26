@@ -3,6 +3,37 @@ const supportService =
 
 
 // ==========================================================
+// STRIP ADMIN-INTERNAL FIELDS BEFORE RETURNING TO THE USER
+// ==========================================================
+//
+// listMyTickets/getMyTicketById already exclude these at the
+// query level (.select("-internalNote -internalNoteHistory")),
+// but createTicket/replyToMyTicket return whatever
+// SupportTicket.create()/ticket.save() hands back, which is the
+// full document - this is the equivalent safety net for those
+// two response paths, so a user can never see internal notes or
+// note-edit history no matter which endpoint they call.
+
+const sanitizeTicketForUser = (ticket) => {
+
+    if (!ticket) {
+        return ticket;
+    }
+
+    const plain =
+        typeof ticket.toObject === "function"
+            ? ticket.toObject()
+            : { ...ticket };
+
+    delete plain.internalNote;
+    delete plain.internalNoteHistory;
+
+    return plain;
+
+};
+
+
+// ==========================================================
 // CREATE TICKET
 // ==========================================================
 
@@ -13,13 +44,15 @@ const createTicket = async (req, res) => {
         const userId =
             req.user?.id || req.user?._id;
 
-        const { subject, category, priority, message, references } = req.body;
+        // Priority is never accepted from the client - it's
+        // always derived server-side from category (see
+        // supportService.createTicket's getAutoPriorityForCategory).
+        const { subject, category, message, references } = req.body;
 
         const ticket =
             await supportService.createTicket(userId, {
                 subject,
                 category,
-                priority,
                 message,
                 references,
             });
@@ -27,7 +60,7 @@ const createTicket = async (req, res) => {
         return res.status(201).json({
             success: true,
             message: "Support ticket created.",
-            data: ticket,
+            data: sanitizeTicketForUser(ticket),
         });
 
     } catch (error) {
@@ -138,7 +171,7 @@ const replyToMyTicket = async (req, res) => {
         return res.status(200).json({
             success: true,
             message: "Reply sent.",
-            data: ticket,
+            data: sanitizeTicketForUser(ticket),
         });
 
     } catch (error) {
@@ -153,72 +186,9 @@ const replyToMyTicket = async (req, res) => {
 };
 
 
-// ==========================================================
-// CLOSE MY TICKET
-// ==========================================================
-
-const closeMyTicket = async (req, res) => {
-
-    try {
-
-        const userId =
-            req.user?.id || req.user?._id;
-
-        const { id } = req.params;
-
-        const ticket =
-            await supportService.closeTicketByUser(userId, id);
-
-        return res.status(200).json({
-            success: true,
-            message: "Ticket closed.",
-            data: ticket,
-        });
-
-    } catch (error) {
-
-        return res.status(400).json({
-            success: false,
-            message: error.message || "Unable to close ticket.",
-        });
-
-    }
-
-};
-
-
-// ==========================================================
-// REOPEN MY TICKET
-// ==========================================================
-
-const reopenMyTicket = async (req, res) => {
-
-    try {
-
-        const userId =
-            req.user?.id || req.user?._id;
-
-        const { id } = req.params;
-
-        const ticket =
-            await supportService.reopenTicketByUser(userId, id);
-
-        return res.status(200).json({
-            success: true,
-            message: "Ticket reopened.",
-            data: ticket,
-        });
-
-    } catch (error) {
-
-        return res.status(400).json({
-            success: false,
-            message: error.message || "Unable to reopen ticket.",
-        });
-
-    }
-
-};
+// Closing AND reopening a ticket are both Admin/Super
+// Admin-only - see adminSupportController.js's changeStatus.
+// There is deliberately no user-facing reopen endpoint at all.
 
 
 module.exports = {
@@ -226,6 +196,4 @@ module.exports = {
     getMyTickets,
     getMyTicketById,
     replyToMyTicket,
-    closeMyTicket,
-    reopenMyTicket,
 };

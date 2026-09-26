@@ -155,6 +155,51 @@ const defaultEmailTemplates = [
         isActive: true,
     },
 
+    {
+        key: "admin_contact_updated",
+        name: "User: Email/Mobile Updated by Admin",
+        description: "Sent to a user when an Admin/Super Admin changes their email address or mobile number (only if the admin opts in via the notification checkbox).",
+        subject: "Your {{channel}} has been updated",
+        body:
+            "Hi {{user_name}},\n\n" +
+            "Your {{channel}} on {{site_name}} has been updated by an administrator to: {{new_value}}.\n\n" +
+            "If you did not expect this change, please contact support immediately.",
+        ctaText: "",
+        ctaUrlVariable: "",
+        variables: ["user_name", "channel", "new_value", "site_name"],
+        isActive: true,
+    },
+
+    {
+        key: "admin_verification_changed",
+        name: "User: Email/Mobile Verification Changed by Admin",
+        description: "Sent to a user when an Admin/Super Admin manually verifies or unverifies their email or mobile number (only if the admin opts in via the notification checkbox).",
+        subject: "Your {{channel}} verification status has changed",
+        body:
+            "Hi {{user_name}},\n\n" +
+            "Your {{channel}} on {{site_name}} has been marked as {{status}} by an administrator.\n\n" +
+            "If you have any questions, please contact support.",
+        ctaText: "",
+        ctaUrlVariable: "",
+        variables: ["user_name", "channel", "status", "site_name"],
+        isActive: true,
+    },
+
+    {
+        key: "support_ticket_closed",
+        name: "Support: Ticket Closed",
+        description: "Sent to a user when an Admin/Super Admin closes their support ticket.",
+        subject: "Your support ticket {{ticket_number}} has been closed",
+        body:
+            "Hi {{user_name}},\n\n" +
+            "Your support ticket \"{{ticket_subject}}\" ({{ticket_number}}) has been closed by our support team.\n\n" +
+            "If you believe this was closed in error or need further help, you can open a new ticket on {{site_name}} or reply to our support team - only an admin can reopen a closed ticket.",
+        ctaText: "",
+        ctaUrlVariable: "",
+        variables: ["user_name", "ticket_number", "ticket_subject", "site_name"],
+        isActive: true,
+    },
+
 ];
 
 module.exports = defaultEmailTemplates;

@@ -86,12 +86,20 @@ const adminRequest = async (
 
 
     /*
-     * Token expired / unauthorized
+     * Token expired / unauthorized.
+     *
+     * 403 deliberately does NOT clear the session here - it
+     * means "this specific action isn't allowed for your role"
+     * (e.g. an `admin` hitting a super_admin-only endpoint), not
+     * "your session is invalid". Clearing on 403 was wiping a
+     * perfectly valid admin session over an ordinary permission
+     * check, which then looked like being logged out on the very
+     * next navigation/refresh even though login itself worked
+     * fine.
      */
 
     if (
-        response.status === 401 ||
-        response.status === 403
+        response.status === 401
     ) {
 
         if (
@@ -150,7 +158,8 @@ const adminRequest = async (
 
 export const adminLogin = async (
     username,
-    password
+    password,
+    rememberMe = false
 ) => {
 
     return await adminRequest(
@@ -161,6 +170,7 @@ export const adminLogin = async (
             body: JSON.stringify({
                 username,
                 password,
+                rememberMe,
             }),
         }
     );
@@ -180,6 +190,37 @@ export const getCurrentAdmin = async () => {
         "/admin/auth/me",
         {
             method: "GET",
+        }
+    );
+
+};
+
+
+/*
+ * ==========================================
+ * ADMIN SELF-SERVICE EMAIL/MOBILE VERIFICATION
+ * ==========================================
+ */
+
+export const requestAdminOtp = async (payload) => {
+
+    return await adminRequest(
+        "/admin/otp/request",
+        {
+            method: "POST",
+            body: JSON.stringify(payload),
+        }
+    );
+
+};
+
+export const verifyAdminOtp = async (payload) => {
+
+    return await adminRequest(
+        "/admin/otp/verify",
+        {
+            method: "POST",
+            body: JSON.stringify(payload),
         }
     );
 
@@ -1073,6 +1114,7 @@ export const updateAdminUser = async (
         role,
         status,
         isVerified,
+        notifyEmail,
     } = userData;
 
 
@@ -1134,6 +1176,11 @@ export const updateAdminUser = async (
                     isVerified:
                         Boolean(
                             isVerified
+                        ),
+
+                    notifyEmail:
+                        Boolean(
+                            notifyEmail
                         ),
 
                 }),
@@ -1990,13 +2037,13 @@ export const replyToAdminSupportTicket = async (id, message) => {
 
 };
 
-export const changeAdminSupportTicketStatus = async (id, status) => {
+export const changeAdminSupportTicketStatus = async (id, status, closingNote) => {
 
     return await adminRequest(
         `/admin/support/tickets/${id}/status`,
         {
             method: "POST",
-            body: JSON.stringify({ status }),
+            body: JSON.stringify({ status, closingNote }),
         }
     );
 
@@ -2014,13 +2061,28 @@ export const changeAdminSupportTicketPriority = async (id, priority) => {
 
 };
 
-export const assignAdminSupportTicket = async (id, adminId) => {
+// `note` is required by the backend whenever the assignment
+// actually changes (assigning, reassigning, or unassigning) -
+// see supportService.assignTicket.
+export const assignAdminSupportTicket = async (id, adminId, note) => {
 
     return await adminRequest(
         `/admin/support/tickets/${id}/assign`,
         {
             method: "POST",
-            body: JSON.stringify({ adminId }),
+            body: JSON.stringify({ adminId, note }),
+        }
+    );
+
+};
+
+export const updateAdminSupportTicketNote = async (id, note) => {
+
+    return await adminRequest(
+        `/admin/support/tickets/${id}/note`,
+        {
+            method: "POST",
+            body: JSON.stringify({ note }),
         }
     );
 
@@ -2219,14 +2281,20 @@ export const changeAdminPassword = async (id, newPassword) => {
 
 
 // ==========================================
-// MANUAL USER EMAIL/MOBILE VERIFICATION
+// MANUAL USER EMAIL/MOBILE VERIFY *OR* UNVERIFY
 // (Super Admin only - enforced server-side)
 // ==========================================
 
-export const manuallyVerifyUserEmail = async (userId) => {
-    return await adminRequest(`/admin/users/${userId}/verify-email`, { method: "POST" });
+export const manuallyVerifyUserEmail = async (userId, verified = true, notifyEmail = false) => {
+    return await adminRequest(`/admin/users/${userId}/verify-email`, {
+        method: "POST",
+        body: JSON.stringify({ verified, notifyEmail }),
+    });
 };
 
-export const manuallyVerifyUserMobile = async (userId) => {
-    return await adminRequest(`/admin/users/${userId}/verify-mobile`, { method: "POST" });
+export const manuallyVerifyUserMobile = async (userId, verified = true, notifyEmail = false) => {
+    return await adminRequest(`/admin/users/${userId}/verify-mobile`, {
+        method: "POST",
+        body: JSON.stringify({ verified, notifyEmail }),
+    });
 };

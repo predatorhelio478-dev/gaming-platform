@@ -43,6 +43,9 @@ import UserEditModal
 import UserBalanceModal
     from "@/components/admin/users/UserBalanceModal";
 
+import UserVerificationModal
+    from "@/components/admin/users/UserVerificationModal";
+
 import {
     getAdminUsers,
     getAdminUserStats,
@@ -128,6 +131,25 @@ export default function UsersPage() {
         useState(null);
 
     const [deleteLoading, setDeleteLoading] =
+        useState(false);
+
+    // ==================================================
+    // EMAIL/MOBILE VERIFY-OR-UNVERIFY MODAL (Super Admin only)
+    // ==================================================
+
+    const [verificationModalOpen, setVerificationModalOpen] =
+        useState(false);
+
+    const [verificationTarget, setVerificationTarget] =
+        useState(null);
+
+    const [verificationChannel, setVerificationChannel] =
+        useState("email");
+
+    const [verificationTargetVerified, setVerificationTargetVerified] =
+        useState(true);
+
+    const [verificationLoading, setVerificationLoading] =
         useState(false);
 
     // ==================================================
@@ -2139,70 +2161,100 @@ export default function UsersPage() {
 
 
     // ==================================================
-    // MANUAL EMAIL / MOBILE VERIFICATION (Super Admin only)
+    // MANUAL EMAIL / MOBILE VERIFY-OR-UNVERIFY (Super Admin
+    // only - enforced server-side regardless of what the UI
+    // shows). Opens the shared confirm modal (which carries
+    // its own "send notification email" checkbox) instead of
+    // acting immediately - used from the table row menu, the
+    // Edit modal, and the View drawer alike.
     // ==================================================
-    //
-    // Bypasses OTP entirely - restricted server-side to
-    // super_admin (a normal admin gets a 403 even if this
-    // were called directly). No confirmation dialog since
-    // it's non-destructive and reversible via the same flow
-    // a user would otherwise complete themselves.
 
-    const handleVerifyEmail =
-        async (user) => {
+    const [verificationError, setVerificationError] =
+        useState("");
+
+    const handleRequestVerification =
+        (user, channel, targetVerified) => {
 
             if (!user?._id) return;
 
-            setActionLoading(true);
-            setError("");
-
-            try {
-
-                await manuallyVerifyUserEmail(user._id);
-
-                if (!mountedRef.current) return;
-
-                await fetchUsers({ page: pagination?.page || 1, showRefreshing: true });
-
-            } catch (requestError) {
-
-                if (mountedRef.current) {
-                    setError(requestError?.message || "Unable to verify email.");
-                }
-
-            } finally {
-
-                if (mountedRef.current) setActionLoading(false);
-
-            }
+            setVerificationTarget(user);
+            setVerificationChannel(channel);
+            setVerificationTargetVerified(targetVerified);
+            setVerificationError("");
+            setVerificationModalOpen(true);
 
         };
 
-    const handleVerifyMobile =
-        async (user) => {
+    const handleCloseVerificationModal =
+        () => {
 
-            if (!user?._id) return;
+            if (verificationLoading) return;
 
-            setActionLoading(true);
-            setError("");
+            setVerificationModalOpen(false);
+            setVerificationTarget(null);
+            setVerificationError("");
+
+        };
+
+    const handleConfirmVerification =
+        async (notifyEmail) => {
+
+            if (!verificationTarget?._id) return;
+
+            setVerificationLoading(true);
+            setVerificationError("");
 
             try {
 
-                await manuallyVerifyUserMobile(user._id);
+                const apply =
+                    verificationChannel === "email"
+                        ? manuallyVerifyUserEmail
+                        : manuallyVerifyUserMobile;
+
+                await apply(
+                    verificationTarget._id,
+                    verificationTargetVerified,
+                    notifyEmail
+                );
 
                 if (!mountedRef.current) return;
 
+                const patch =
+                    verificationChannel === "email"
+                        ? { emailVerified: verificationTargetVerified }
+                        : { mobileVerified: verificationTargetVerified };
+
+                setVerificationModalOpen(false);
+
+                const verifiedUserId = verificationTarget._id;
+
+                setVerificationTarget(null);
+
                 await fetchUsers({ page: pagination?.page || 1, showRefreshing: true });
+
+                if (!mountedRef.current) return;
+
+                if (selectedUser?._id === verifiedUserId) {
+
+                    await handleViewUser({ ...selectedUser, ...patch });
+
+                }
+
+                if (editUser?._id === verifiedUserId) {
+
+                    setEditUser((current) => current ? { ...current, ...patch } : current);
+
+                }
 
             } catch (requestError) {
 
                 if (mountedRef.current) {
-                    setError(requestError?.message || "Unable to verify mobile number.");
+                    setVerificationError(requestError?.message || "Unable to update verification status.");
                 }
 
             } finally {
 
-                if (mountedRef.current) setActionLoading(false);
+                if (mountedRef.current) setVerificationLoading(false);
 
             }
 
@@ -2554,8 +2606,7 @@ export default function UsersPage() {
                     actionLoading={actionLoading}
                     onPageChange={handlePageChange}
                     canManuallyVerify={currentAdminRole === "super_admin"}
-                    onVerifyEmail={handleVerifyEmail}
-                    onVerifyMobile={handleVerifyMobile}
+                    onRequestVerification={handleRequestVerification}
                 />
 
                 {/* =====================================================
@@ -2569,11 +2620,13 @@ export default function UsersPage() {
                     formatCurrency={formatCurrency}
                     formatDate={formatDate}
                     actionLoading={actionLoading}
+                    canManuallyVerify={currentAdminRole === "super_admin"}
                     onClose={handleCloseDrawer}
                     onEdit={handleOpenEditUser}
                     onBalance={handleOpenBalanceModal}
                     onBlock={handleBlockUser}
                     onUnblock={handleUnblockUser}
+                    onRequestVerification={handleRequestVerification}
                 />
 
 
@@ -2636,6 +2689,9 @@ export default function UsersPage() {
                     actionLoading={
                         editUserLoading
                     }
+                    canManuallyVerify={
+                        currentAdminRole === "super_admin"
+                    }
                     onClose={
                         handleCloseEditUser
                     }
@@ -2645,6 +2701,9 @@ export default function UsersPage() {
                     onChangePassword={
                         handleChangeUserPassword
                     }
+                    onRequestVerification={
+                        handleRequestVerification
+                    }
                 />
 
                 <UserBalanceModal
@@ -2653,6 +2712,17 @@ export default function UsersPage() {
                     actionLoading={balanceLoading}
                     onClose={handleCloseBalanceModal}
                     onSubmit={handleAdjustBalance}
+                />
+
+                <UserVerificationModal
+                    open={verificationModalOpen}
+                    user={verificationTarget}
+                    channel={verificationChannel}
+                    targetVerified={verificationTargetVerified}
+                    actionLoading={verificationLoading}
+                    error={verificationError}
+                    onClose={handleCloseVerificationModal}
+                    onConfirm={handleConfirmVerification}
                 />
 
                 <DeleteUserModal

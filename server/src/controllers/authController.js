@@ -11,6 +11,7 @@ const emailTemplateService = require("../services/emailTemplateService");
 const { normalizeMobile } = require("../validators/requestValidators");
 const { createAuditLog } = require("../services/auditLogService");
 const { assertNotLockedOut, recordFailedAttempt, resetLockout, formatDuration } = require("../utils/loginLockout");
+const smsService = require("../services/smsService");
 
 
 // ======================================================
@@ -720,7 +721,7 @@ const findUserByCredentials = async (
 // SHARED: ISSUE A SESSION FOR AN ALREADY-VALIDATED USER
 // ======================================================
 
-const issueSession = async (user) => {
+const issueSession = async (user, rememberMe = false) => {
 
     user.lastLogin =
         new Date();
@@ -733,7 +734,8 @@ const issueSession = async (user) => {
 
     const token =
         await generateToken(
-            user._id
+            user._id,
+            rememberMe
         );
 
     const userResponse =
@@ -790,8 +792,13 @@ const checkVerificationGates = async (user) => {
             false
         );
 
+    // Never block login over an unverified mobile when no SMS
+    // provider is actually wired up - otp/mobile OTPs can never
+    // be delivered in that case, which would permanently lock
+    // the user out with no way to complete the gate.
     if (
         mobileVerificationRequired === true &&
+        smsService.isSmsConfigured() &&
         user.mobile &&
         !user.mobileVerified
     ) {
@@ -825,6 +832,7 @@ exports.login = async (
             identifier,
             email,
             password,
+            rememberMe,
         } = req.body;
 
         const user =
@@ -863,7 +871,7 @@ exports.login = async (
 
 
         const session =
-            await issueSession(user);
+            await issueSession(user, rememberMe === true);
 
 
         return res.json({
@@ -1027,6 +1035,7 @@ exports.verifyAndLogin = async (
             channel = "email",
             otp,
             purpose = "verify_email",
+            rememberMe,
         } = req.body;
 
         const user =
@@ -1078,7 +1087,7 @@ exports.verifyAndLogin = async (
         }
 
         const session =
-            await issueSession(refreshedUser);
+            await issueSession(refreshedUser, rememberMe === true);
 
         return res.json({
 

@@ -6,6 +6,9 @@ const OtpVerification =
 const User =
     require("../models/User");
 
+const Admin =
+    require("../models/Admin");
+
 const settingsService =
     require("./settingsService");
 
@@ -434,6 +437,13 @@ const verifyOtp = async (
     // ======================================================
     // APPLY VERIFICATION (and the new value, for change_*)
     // ======================================================
+    //
+    // Admin uses `phoneVerified` for its mobile-verified flag
+    // (User uses `mobileVerified`) - everything else about the
+    // shape is identical between the two models.
+
+    const Model =
+        actorModel === "Admin" ? Admin : User;
 
     const update = {};
 
@@ -449,7 +459,15 @@ const verifyOtp = async (
 
     } else {
 
-        update.mobileVerified = true;
+        if (actorModel === "Admin") {
+
+            update.phoneVerified = true;
+
+        } else {
+
+            update.mobileVerified = true;
+
+        }
 
         if (purpose === "change_mobile") {
 
@@ -459,7 +477,7 @@ const verifyOtp = async (
 
     }
 
-    await User.findByIdAndUpdate(
+    await Model.findByIdAndUpdate(
         userId,
         { $set: update }
     );

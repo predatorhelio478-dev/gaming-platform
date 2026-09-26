@@ -122,13 +122,41 @@ const getTransporter = () => {
             ? parsedPort
             : 587;
 
+    // SMTP_SECURE lets the port/secure combo be flipped purely
+    // via env vars (e.g. to try 465+secure:true instead of
+    // 587+secure:false against Gmail on a host like Render)
+    // without a code change or redeploy of anything but the env
+    // var itself. Falls back to the standard port-based inference
+    // (465 = implicit TLS, everything else = STARTTLS) when unset.
+    const rawSecure =
+        String(process.env.SMTP_SECURE || "").trim().toLowerCase();
+
+    const secure =
+        rawSecure === "true" ? true :
+        rawSecure === "false" ? false :
+        port === 465;
+
+    console.log(
+        `[emailService] Configuring SMTP transporter: host=${process.env.SMTP_HOST} port=${port} secure=${secure}`
+    );
+
     cachedTransporter = nodemailer.createTransport({
 
         host: process.env.SMTP_HOST,
 
         port,
 
-        secure: port === 465,
+        secure,
+
+        // Gmail always offers STARTTLS on 587 - requiring it
+        // (rather than silently sending in the clear if a
+        // handshake step gets dropped) fails fast and clearly
+        // instead of a confusing later auth error.
+        requireTLS: !secure,
+
+        tls: {
+            minVersion: "TLSv1.2",
+        },
 
         auth: {
             user: process.env.SMTP_USER,

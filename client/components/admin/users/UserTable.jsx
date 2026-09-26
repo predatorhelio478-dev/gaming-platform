@@ -20,6 +20,7 @@ import AdminTable, {
 
 import AdminBadge from "../ui/AdminBadge";
 import AdminPagination from "../ui/AdminPagination";
+import AdminActionsMenu from "../ui/AdminActionsMenu";
 
 
 // ======================================================
@@ -42,8 +43,7 @@ export default function UserTable({
     actionLoading = false,
     onPageChange,
     canManuallyVerify = false,
-    onVerifyEmail,
-    onVerifyMobile,
+    onRequestVerification,
 }) {
 
     const page =
@@ -870,169 +870,6 @@ export default function UserTable({
 
 
                                     {/* =================================================
-                                        BLOCK / UNBLOCK
-                                    ================================================== */}
-
-                                    {!admin &&
-                                        (
-                                            userBlocked
-                                                ? (
-
-                                                    <button
-                                                        type="button"
-                                                        disabled={
-                                                            actionLoading
-                                                        }
-                                                        onClick={() =>
-                                                            onUnblock?.(
-                                                                user
-                                                            )
-                                                        }
-                                                        title="Unblock user"
-                                                        className="
-                                                            inline-flex
-                                                            cursor-pointer
-                                                            items-center
-                                                            justify-center
-                                                            rounded-lg
-                                                            border
-                                                            border-green-500/20
-                                                            bg-green-500/[0.05]
-                                                            p-2
-                                                            text-green-400
-                                                            transition
-                                                            hover:bg-green-500/[0.10]
-                                                            disabled:cursor-not-allowed
-                                                            disabled:opacity-40
-                                                        "
-                                                    >
-
-                                                        <CheckCircle2
-                                                            size={14}
-                                                        />
-
-                                                    </button>
-
-                                                )
-                                                : (
-
-                                                    <button
-                                                        type="button"
-                                                        disabled={
-                                                            actionLoading
-                                                        }
-                                                        onClick={() =>
-                                                            onBlock?.(
-                                                                user
-                                                            )
-                                                        }
-                                                        title="Block user"
-                                                        className="
-                                                            inline-flex
-                                                            cursor-pointer
-                                                            items-center
-                                                            justify-center
-                                                            rounded-lg
-                                                            border
-                                                            border-red-500/20
-                                                            bg-red-500/[0.05]
-                                                            p-2
-                                                            text-red-400
-                                                            transition
-                                                            hover:bg-red-500/[0.10]
-                                                            disabled:cursor-not-allowed
-                                                            disabled:opacity-40
-                                                        "
-                                                    >
-
-                                                        <Ban
-                                                            size={14}
-                                                        />
-
-                                                    </button>
-
-                                                )
-                                        )}
-
-
-                                    {/* =================================================
-                                        DEACTIVATE (SOFT DELETE)
-                                    ================================================== */}
-
-                                    {!admin && !user?.isDeleted && !user?.isPermanentlyDeleted && (
-
-                                        <button
-                                            type="button"
-                                            disabled={
-                                                actionLoading
-                                            }
-                                            onClick={() =>
-                                                onDeactivate?.(
-                                                    user
-                                                )
-                                            }
-                                            title="Deactivate user"
-                                            className="
-                                                inline-flex
-                                                cursor-pointer
-                                                items-center
-                                                justify-center
-                                                rounded-lg
-                                                border
-                                                border-red-500/20
-                                                bg-red-500/[0.05]
-                                                p-2
-                                                text-red-400
-                                                transition
-                                                hover:bg-red-500/[0.10]
-                                                disabled:cursor-not-allowed
-                                                disabled:opacity-40
-                                            "
-                                        >
-
-                                            <UserX
-                                                size={14}
-                                            />
-
-                                        </button>
-
-                                    )}
-
-
-                                    {/* =================================================
-                                        MANUAL VERIFY (Super Admin only - OTP bypass)
-                                    ================================================== */}
-
-                                    {canManuallyVerify && !user?.emailVerified && (
-
-                                        <button
-                                            type="button"
-                                            disabled={actionLoading}
-                                            onClick={() => onVerifyEmail?.(user)}
-                                            title="Manually verify email (super admin - no OTP)"
-                                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-2 text-emerald-400 transition hover:bg-emerald-500/[0.10] disabled:cursor-not-allowed disabled:opacity-40"
-                                        >
-                                            <ShieldCheck size={14} />
-                                        </button>
-
-                                    )}
-
-                                    {canManuallyVerify && user?.mobile && !user?.mobileVerified && (
-
-                                        <button
-                                            type="button"
-                                            disabled={actionLoading}
-                                            onClick={() => onVerifyMobile?.(user)}
-                                            title="Manually verify mobile (super admin - no OTP)"
-                                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-2 text-emerald-400 transition hover:bg-emerald-500/[0.10] disabled:cursor-not-allowed disabled:opacity-40"
-                                        >
-                                            <ShieldAlert size={14} />
-                                        </button>
-
-                                    )}
-
-
-                                    {/* =================================================
                                         DELETE (PERMANENT)
                                     ================================================== */}
 
@@ -1075,6 +912,76 @@ export default function UserTable({
                                         </button>
 
                                     )}
+
+
+                                    {/* =================================================
+                                        MORE ACTIONS (Block/Unblock, Deactivate,
+                                        Verify/Unverify Email/Mobile)
+                                    ================================================== */}
+
+                                    <AdminActionsMenu
+                                        disabled={actionLoading}
+                                        items={[
+
+                                            !admin && (
+                                                userBlocked
+                                                    ? {
+                                                        key: "unblock",
+                                                        label: "Unblock User",
+                                                        icon: CheckCircle2,
+                                                        onClick: () => onUnblock?.(user),
+                                                    }
+                                                    : {
+                                                        key: "block",
+                                                        label: "Block User",
+                                                        icon: Ban,
+                                                        danger: true,
+                                                        onClick: () => onBlock?.(user),
+                                                    }
+                                            ),
+
+                                            !admin && !user?.isDeleted && !user?.isPermanentlyDeleted && {
+                                                key: "deactivate",
+                                                label: "Deactivate User",
+                                                icon: UserX,
+                                                danger: true,
+                                                onClick: () => onDeactivate?.(user),
+                                            },
+
+                                            canManuallyVerify && (
+                                                user?.emailVerified
+                                                    ? {
+                                                        key: "unverify-email",
+                                                        label: "Unverify Email",
+                                                        icon: ShieldAlert,
+                                                        onClick: () => onRequestVerification?.(user, "email", false),
+                                                    }
+                                                    : {
+                                                        key: "verify-email",
+                                                        label: "Verify Email",
+                                                        icon: ShieldCheck,
+                                                        onClick: () => onRequestVerification?.(user, "email", true),
+                                                    }
+                                            ),
+
+                                            canManuallyVerify && user?.mobile && (
+                                                user?.mobileVerified
+                                                    ? {
+                                                        key: "unverify-mobile",
+                                                        label: "Unverify Mobile",
+                                                        icon: ShieldAlert,
+                                                        onClick: () => onRequestVerification?.(user, "mobile", false),
+                                                    }
+                                                    : {
+                                                        key: "verify-mobile",
+                                                        label: "Verify Mobile",
+                                                        icon: ShieldCheck,
+                                                        onClick: () => onRequestVerification?.(user, "mobile", true),
+                                                    }
+                                            ),
+
+                                        ]}
+                                    />
 
                                 </div>
 

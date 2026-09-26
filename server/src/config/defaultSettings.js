@@ -247,9 +247,9 @@ const defaultSettings = [
     {
         category: "user",
         key: "mobile_verification_required",
-        value: true,
+        value: false,
         type: "boolean",
-        description: "Require mobile verification",
+        description: "Require mobile verification (has no effect until an SMS provider is configured - see smsService.js)",
         isPublic: true,
     },
 

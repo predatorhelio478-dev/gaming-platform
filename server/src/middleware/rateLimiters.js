@@ -50,15 +50,13 @@ const buildRateLimitHandler = (message) => (req, res) => {
  * Max attempts is admin-configurable via
  * Settings -> security.max_login_attempts.
  *
- * windowMs is deliberately 1 minute, not the previous 15: this
- * limiter's own retryAfterSeconds is bounded by the window
- * length, and no "Too many attempts" wait anywhere in the app
- * (this limiter or the account-level progressive lockout in
- * loginLockout.js) may exceed 60 seconds. Rate limiting itself
- * stays intact - still exactly max_login_attempts requests
- * allowed per rolling window, just a shorter window - and the
- * account-level lockout (loginLockout.js) independently keeps
- * escalating per-account brute-force protection on top of this.
+ * This is a raw per-IP request-volume ceiling, independent of
+ * the account-level progressive lockout in loginLockout.js
+ * (which escalates a SPECIFIC account's wait from 30s up to 30
+ * minutes the more it's attacked - see that file for the
+ * schedule). windowMs stays short here since this layer's job is
+ * just to blunt a burst of raw requests, not to enforce the
+ * account-level schedule.
  */
 
 const authLimiter = rateLimit({

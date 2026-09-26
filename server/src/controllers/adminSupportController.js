@@ -143,13 +143,14 @@ const changeStatus = async (req, res) => {
     try {
 
         const { id } = req.params;
-        const { status } = req.body;
+        const { status, closingNote } = req.body;
 
         const { ticket } =
             await supportService.changeTicketStatus(
                 req.admin?._id || null,
                 id,
-                status
+                status,
+                { closingNote }
             );
 
         return res.status(200).json({
@@ -210,8 +211,11 @@ const changePriority = async (req, res) => {
 // ASSIGN TICKET
 // ==========================================================
 //
-// Omitting `adminId` self-assigns to the requesting admin;
-// passing `adminId: null` explicitly unassigns.
+// `adminId` must always be explicit now - there is no more
+// implicit self-assign when it's omitted. Passing
+// `adminId: null` (or omitting it) unassigns. A `note` is
+// required whenever the assignment actually changes - enforced
+// in supportService.assignTicket, not just here.
 // ==========================================================
 
 const assignTicket = async (req, res) => {
@@ -219,25 +223,19 @@ const assignTicket = async (req, res) => {
     try {
 
         const { id } = req.params;
-
-        const hasExplicitAdminId =
-            Object.prototype.hasOwnProperty.call(req.body, "adminId");
-
-        const targetAdminId =
-            hasExplicitAdminId
-                ? req.body.adminId
-                : req.admin?._id;
+        const { adminId, note } = req.body;
 
         const { ticket } =
             await supportService.assignTicket(
-                req.admin?._id || null,
+                req.admin,
                 id,
-                targetAdminId
+                adminId || null,
+                note
             );
 
         return res.status(200).json({
             success: true,
-            message: targetAdminId ? "Ticket assigned." : "Ticket unassigned.",
+            message: adminId ? "Ticket assigned." : "Ticket unassigned.",
             data: ticket,
         });
 
@@ -246,6 +244,42 @@ const assignTicket = async (req, res) => {
         return res.status(400).json({
             success: false,
             message: error.message || "Unable to assign ticket.",
+        });
+
+    }
+
+};
+
+
+// ==========================================================
+// UPDATE INTERNAL NOTE (independent of assignment)
+// ==========================================================
+
+const updateNote = async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+        const { note } = req.body;
+
+        const { ticket, changed } =
+            await supportService.updateInternalNote(
+                req.admin,
+                id,
+                note
+            );
+
+        return res.status(200).json({
+            success: true,
+            message: changed ? "Note updated." : "No change - note is identical to the current one.",
+            data: ticket,
+        });
+
+    } catch (error) {
+
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Unable to update note.",
         });
 
     }
@@ -293,5 +327,6 @@ module.exports = {
     changeStatus,
     changePriority,
     assignTicket,
+    updateNote,
     getStats,
 };

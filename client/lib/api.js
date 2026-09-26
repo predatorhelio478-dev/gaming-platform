@@ -920,35 +920,6 @@ export const replyToMySupportTicket =
 
     };
 
-export const closeMySupportTicket =
-    async (
-        id
-    ) => {
-
-        return await apiRequest(
-            `/support/tickets/${id}/close`,
-            {
-                method: "POST",
-            }
-        );
-
-    };
-
-export const reopenMySupportTicket =
-    async (
-        id
-    ) => {
-
-        return await apiRequest(
-            `/support/tickets/${id}/reopen`,
-            {
-                method: "POST",
-            }
-        );
-
-    };
-
-
 // ======================================================
 // FORGOT / RESET PASSWORD (USER)
 // ======================================================

@@ -65,15 +65,38 @@ export default function AdminAuthGuard({ children }) {
                     error
                 );
 
-                localStorage.removeItem(
-                    "adminToken"
-                );
+                // Only a genuine 401 (invalid/expired token) means
+                // the session itself is bad - clear it and send the
+                // admin back to login. Any OTHER failure (network
+                // blip, a transient 5xx, the backend still starting
+                // up) is NOT proof the session is invalid: treating
+                // every error as "logged out" was wiping a perfectly
+                // valid token on the very first render after login
+                // (this effect re-runs on every route change), which
+                // looked exactly like being logged out immediately
+                // after a successful login. Fail open here instead -
+                // keep the existing token and let the page render;
+                // a real 401 on a later API call still gets caught
+                // by adminRequest()'s own interceptor.
+                if (error?.status === 401) {
 
-                localStorage.removeItem(
-                    "admin"
-                );
+                    localStorage.removeItem(
+                        "adminToken"
+                    );
 
-                router.replace("/admin/login");
+                    localStorage.removeItem(
+                        "admin"
+                    );
+
+                    router.replace("/admin/login");
+                    return;
+
+                }
+
+                if (mounted) {
+                    setAuthorized(true);
+                    setChecking(false);
+                }
             }
         };
 

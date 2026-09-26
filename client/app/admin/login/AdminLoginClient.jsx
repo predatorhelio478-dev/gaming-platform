@@ -12,6 +12,7 @@ import {
 } from "next/navigation";
 
 import {
+    Check,
     Eye,
     EyeOff,
     LogIn,
@@ -104,6 +105,10 @@ function AdminLoginForm() {
 
 
     const [showPassword, setShowPassword] =
+        useState(false);
+
+
+    const [rememberMe, setRememberMe] =
         useState(false);
 
 
@@ -341,7 +346,9 @@ function AdminLoginForm() {
 
                         formData.username.trim(),
 
-                        formData.password
+                        formData.password,
+
+                        rememberMe
 
                     );
 
@@ -611,7 +618,26 @@ function AdminLoginForm() {
                 </div>
 
 
-                <div className="-mt-2 text-right">
+                <div className="-mt-2 flex items-center justify-between">
+
+                    <label className="group flex items-center gap-2 text-xs font-medium text-slate-400 transition-colors select-none hover:text-slate-300">
+                        <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+                            <input
+                                type="checkbox"
+                                checked={rememberMe}
+                                onChange={(event) => setRememberMe(event.target.checked)}
+                                disabled={loading}
+                                className="peer absolute inset-0 h-4 w-4 cursor-pointer appearance-none rounded-md border border-white/15 bg-[#080a14] transition-all duration-150 checked:border-purple-500 checked:bg-purple-600 group-hover:border-white/30 focus-visible:ring-2 focus-visible:ring-purple-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[#080a14] disabled:cursor-not-allowed disabled:opacity-50"
+                            />
+                            <Check
+                                size={11}
+                                strokeWidth={3}
+                                className="pointer-events-none relative z-10 scale-75 text-white opacity-0 transition-all duration-150 peer-checked:scale-100 peer-checked:opacity-100"
+                            />
+                        </span>
+                        Remember me
+                    </label>
+
                     <a
                         href="/admin/forgot-password"
                         className="text-xs font-semibold text-purple-400 transition hover:text-purple-300 hover:underline"

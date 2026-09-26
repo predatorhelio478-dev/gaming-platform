@@ -14,7 +14,7 @@ import UserHeader
 import UserFooter
     from "./UserFooter";
 
-import useAuth
+import useAuth, { getStoredToken }
     from "../../lib/useAuth";
 
 import useWallet
@@ -141,14 +141,37 @@ export default function UserLayout({
     // Every hook below runs unconditionally, on every render,
     // regardless of auth state - only the JSX returned differs
     // (never skip a hook behind a conditional early return).
+    //
+    // IMPORTANT: this reads getStoredToken() directly rather
+    // than trusting auth.isAuthenticated for the decision to
+    // wipe the session and navigate away. useAuth() is backed
+    // by useSyncExternalStore, whose FIRST render after a hard
+    // refresh/hydration reflects the server snapshot (always
+    // "logged out", since the server can't see localStorage) -
+    // React corrects this a moment later, but handleSessionExpiry()
+    // calls window.location.replace(), a real navigation that
+    // can't be undone once started. If this effect ever fired on
+    // that transient pre-correction render, it would wipe a
+    // perfectly valid token and navigate to /login before the
+    // correction had a chance to happen - which is exactly what
+    // was causing "logged in, then refresh logs me out". Reading
+    // localStorage directly here always reflects the true current
+    // value regardless of any React rendering/hydration timing.
 
     useEffect(() => {
 
-        if (requireAuth && !auth.isAuthenticated) {
+        if (requireAuth && !getStoredToken()) {
 
             handleSessionExpiry();
 
         }
+
+        // auth.isAuthenticated is intentionally in the dependency
+        // array (so this still reacts to a real logout/expiry that
+        // happens while this component stays mounted - another
+        // tab logging out, a 401 elsewhere clearing the session)
+        // even though the actual decision above re-checks
+        // localStorage directly rather than trusting this value.
 
     }, [requireAuth, auth.isAuthenticated]);
 
