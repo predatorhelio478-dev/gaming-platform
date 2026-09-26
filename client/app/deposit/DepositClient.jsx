@@ -332,7 +332,7 @@ export default function DepositPage() {
                             {submitting ? "Processing..." : "Pay Now"}
                         </button>
 
-                        <p className="text-center mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">
+                        <p className="text-center mt-0.5  truncate text-[12px] text-slate-500">
                             Secured by Razorpay. Your wallet is credited only after payment is verified.
                         </p>
 
