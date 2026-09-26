@@ -1193,7 +1193,7 @@ export default function RoundsPage() {
 
                     <div className="mb-6 flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
 
-                        <div className="flex items-center gap-2 text-slate-700">
+                        <div className="flex items-center gap-2 text-slate-500">
 
                             <span
                                 className={`h-1.5 w-1.5 rounded-full ${autoRefresh
@@ -1209,7 +1209,7 @@ export default function RoundsPage() {
                         </div>
 
 
-                        <p className="text-slate-700">
+                        <p className="text-slate-500">
 
                             Last refreshed:{" "}
 
@@ -1259,7 +1259,7 @@ export default function RoundsPage() {
 
                                     <div className="flex items-center gap-2">
 
-                                        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
+                                        <span className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-400">
                                             Current Round
                                         </span>
 
@@ -1289,7 +1289,7 @@ export default function RoundsPage() {
 
                             <div className="sm:text-right">
 
-                                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
+                                <p className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-400">
                                     Time Remaining
                                 </p>
 
@@ -1305,7 +1305,7 @@ export default function RoundsPage() {
 
 
                                 {currentRound?.endTime && (
-                                    <p className="mt-1 text-[10px] text-slate-700">
+                                    <p className="mt-1 text-[12px] text-slate-400">
 
                                         Ends{" "}
 
@@ -1464,7 +1464,7 @@ export default function RoundsPage() {
                     FOOTER
                 ===================================================== */}
 
-                <footer className="py-8 text-center text-xs text-slate-700">
+                <footer className="py-8 text-center text-xs text-slate-500">
                     {siteName} Admin Control Center
                 </footer>
 

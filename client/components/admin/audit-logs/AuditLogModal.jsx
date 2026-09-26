@@ -154,7 +154,7 @@ function DetailItem({
     return (
         <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
 
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-700">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                 {label}
             </p>
 

@@ -282,7 +282,7 @@ function ForgotPasswordForm() {
                                 placeholder="000000"
                                 disabled={loading || resetComplete}
                                 autoFocus
-                                className="w-full rounded-xl border border-white/[0.08] bg-[#080a14] px-4 py-3.5 text-center text-2xl tracking-[0.5em] text-white outline-none transition placeholder:text-slate-700 focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="w-full rounded-xl border border-white/[0.08] bg-[#080a14] px-4 py-3.5 text-center text-2xl tracking-[0.5em] text-white outline-none transition placeholder:text-slate-500 focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/10 disabled:cursor-not-allowed disabled:opacity-50"
                             />
                         </div>
 

@@ -9,7 +9,7 @@ export default function BetDistribution({ stats, formatCurrency }) {
 
     return (
         <section className="rounded-2xl border border-white/[0.06] bg-[#0d101d] p-5 sm:p-6 xl:col-span-2">
-            <p className="text-xs uppercase tracking-wider text-slate-600">Current Exposure</p>
+            <p className="text-xs uppercase tracking-wider text-slate-400">Current Exposure</p>
             <h3 className="mt-1 text-lg font-bold">Bet Distribution</h3>
 
             <div className="mt-6 space-y-5">
@@ -41,7 +41,7 @@ export default function BetDistribution({ stats, formatCurrency }) {
             </div>
 
             <div className="mt-6 flex items-center justify-between border-t border-white/[0.06] pt-4">
-                <span className="text-xs uppercase tracking-wider text-slate-600">Total Exposure</span>
+                <span className="text-xs uppercase tracking-wider text-slate-400">Total Exposure</span>
                 <span className="font-bold">{formatCurrency(total)}</span>
             </div>
         </section>

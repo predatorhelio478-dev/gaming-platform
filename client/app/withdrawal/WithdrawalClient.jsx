@@ -282,7 +282,7 @@ export default function WithdrawalPage() {
                             placeholder="e.g. your UPI ID or bank account + IFSC"
                             className="w-full rounded-xl border border-white/10 bg-[#050a19] px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-violet-500/60 disabled:opacity-50"
                         />
-                        <p className="mt-1 text-[12px] text-slate-500">
+                        <p className="mt-1 text-[12px] text-slate-400">
                             Human-readable summary shown to admins during manual review.
                         </p>
                     </div>

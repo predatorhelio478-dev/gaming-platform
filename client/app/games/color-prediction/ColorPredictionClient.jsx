@@ -2694,7 +2694,7 @@ export default function ColorPredictionPage() {
                                 </button>
 
 
-                                <span className="text-slate-700">
+                                <span className="text-slate-500">
                                     •
                                 </span>
 
@@ -2711,7 +2711,7 @@ export default function ColorPredictionPage() {
                                 </span>
 
 
-                                <span className="text-slate-700">
+                                <span className="text-slate-500">
                                     •
                                 </span>
 

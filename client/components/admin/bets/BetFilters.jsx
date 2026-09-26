@@ -137,7 +137,7 @@ export default function BetFilters({
                             left-3
                             top-1/2
                             -translate-y-1/2
-                            text-slate-700
+                            text-slate-500
                         "
                     />
 
@@ -165,11 +165,11 @@ export default function BetFilters({
                             py-3
                             pl-9
                             pr-10
-                            text-xs
+                            text-sm
                             text-white
                             outline-none
                             transition
-                            placeholder:text-slate-700
+                            placeholder:text-slate-600
                             hover:border-white/[0.12]
                             focus:border-purple-500/40
                         "
@@ -196,7 +196,7 @@ export default function BetFilters({
                                 top-1/2
                                 -translate-y-1/2
                                 cursor-pointer
-                                text-slate-700
+                                text-slate-500
                                 transition
                                 hover:text-white
                             "
@@ -238,7 +238,7 @@ export default function BetFilters({
                             font-bold
                             uppercase
                             tracking-[0.08em]
-                            text-slate-700
+                            text-slate-500
                             sm:flex
                         "
                     >
@@ -378,7 +378,7 @@ export default function BetFilters({
                         className="
                             text-[10px]
                             font-semibold
-                            text-slate-700
+                            text-slate-500
                         "
                     >
                         Active filters:

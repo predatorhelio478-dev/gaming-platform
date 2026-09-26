@@ -399,7 +399,7 @@ export default function WalletUsersTable({
                             text-white
                             outline-none
                             transition
-                            placeholder:text-slate-700
+                            placeholder:text-slate-500
                             focus:border-violet-500/40
                         "
                     />
@@ -614,7 +614,7 @@ export default function WalletUsersTable({
                                             className="
                                                 mt-1
                                                 text-[10px]
-                                                text-slate-700
+                                                text-slate-500
                                             "
                                         >
 
@@ -752,7 +752,7 @@ export default function WalletUsersTable({
                                                                 mt-0.5
                                                                 truncate
                                                                 text-[10px]
-                                                                text-slate-700
+                                                                text-slate-500
                                                             "
                                                         >
 

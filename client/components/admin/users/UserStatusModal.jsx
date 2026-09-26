@@ -162,7 +162,7 @@ export default function UserStatusModal({
                             </h2>
 
 
-                            <p className="mt-0.5 text-[10px] text-slate-700">
+                            <p className="mt-0.5 text-[10px] text-slate-500">
                                 Account status confirmation
                             </p>
 
@@ -295,7 +295,7 @@ export default function UserStatusModal({
 
                                 {username && (
 
-                                    <p className="mt-0.5 truncate text-[11px] text-slate-600">
+                                    <p className="mt-0.5 truncate mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">
                                         {username}
                                     </p>
 
@@ -377,11 +377,11 @@ export default function UserStatusModal({
                         IMPORTANT NOTE
                     ============================================== */}
 
-                    <div className="mt-4 flex items-start gap-2 text-[10px] leading-4 text-slate-700">
+                    <div className="mt-4 flex items-start gap-2 text-[10px] leading-4 text-slate-500">
 
                         <ShieldCheck
                             size={13}
-                            className="mt-0.5 shrink-0 text-slate-700"
+                            className="mt-0.5 shrink-0 text-slate-500"
                         />
 
                         <p>
@@ -549,7 +549,7 @@ function InfoRow({
 
         <div className="min-w-0 rounded-lg border border-white/[0.04] bg-white/[0.015] px-3 py-2">
 
-            <p className="text-[8px] font-bold uppercase tracking-[0.08em] text-slate-700">
+            <p className="text-[8px] font-bold uppercase tracking-[0.08em] text-slate-500">
                 {label}
             </p>
 

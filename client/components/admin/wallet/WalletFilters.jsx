@@ -278,7 +278,7 @@ export default function WalletFilters({
                                 text-sm
                                 text-white
                                 outline-none
-                                placeholder:text-slate-700
+                                placeholder:text-slate-500
                             "
                         />
 
@@ -636,7 +636,7 @@ export default function WalletFilters({
                                 text-xs
                                 text-white
                                 outline-none
-                                placeholder:text-slate-700
+                                placeholder:text-slate-500
                             "
                         />
 
@@ -705,7 +705,7 @@ export default function WalletFilters({
                                 text-xs
                                 text-white
                                 outline-none
-                                placeholder:text-slate-700
+                                placeholder:text-slate-500
                             "
                         />
 

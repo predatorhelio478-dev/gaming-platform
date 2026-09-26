@@ -111,7 +111,7 @@ export default function AdminHeader({
 
                 <div className="min-w-0">
 
-                    <p className="truncate text-xs uppercase tracking-[0.18em] text-slate-600">
+                    <p className="truncate text-xs uppercase tracking-[0.18em] text-slate-500">
                         {subtitle}
                     </p>
 
@@ -174,7 +174,7 @@ export default function AdminHeader({
 
                 <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-2">
 
-                    <p className="text-[10px] uppercase text-slate-600">
+                    <p className="text-[11px] uppercase text-slate-400">
                         Admin
                     </p>
 

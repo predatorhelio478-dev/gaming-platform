@@ -131,7 +131,7 @@ export default function SettingValueInput({
                     )
                 }
                 rows={4}
-                className="w-full min-w-[280px] rounded-xl border border-white/[0.07] bg-[#070914] px-3 py-2.5 font-mono text-xs text-slate-300 outline-none transition placeholder:text-slate-700 focus:border-purple-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full min-w-[280px] rounded-xl border border-white/[0.07] bg-[#070914] px-3 py-2.5 font-mono text-xs text-slate-300 outline-none transition placeholder:text-slate-500 focus:border-purple-500/40 disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="Enter valid JSON"
             />
         );

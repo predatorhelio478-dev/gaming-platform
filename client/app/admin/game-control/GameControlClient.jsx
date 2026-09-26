@@ -536,7 +536,7 @@ export default function GameControlPage() {
                         {/* ROUND */}
 
                         <div>
-                            <p className="text-xs uppercase tracking-[0.15em] text-slate-600">
+                            <p className="text-xs uppercase tracking-[0.15em] text-slate-400">
                                 Current Round
                             </p>
 
@@ -628,7 +628,7 @@ export default function GameControlPage() {
                         font-semibold
                         uppercase
                         tracking-wider
-                        text-slate-600
+                        text-slate-400
                     "
                                     >
                                         Status
@@ -697,7 +697,7 @@ export default function GameControlPage() {
                         font-semibold
                         uppercase
                         tracking-wider
-                        text-slate-600
+                        text-slate-400
                     "
                                     >
                                         Current Round
@@ -766,7 +766,7 @@ export default function GameControlPage() {
                         font-semibold
                         uppercase
                         tracking-wider
-                        text-slate-600
+                        text-slate-400
                     "
                                     >
                                         Remaining Time
@@ -823,7 +823,7 @@ export default function GameControlPage() {
 
                 <section className="mt-6 rounded-2xl border border-white/[0.06] bg-[#0d101d] p-5 sm:p-6">
                     <div>
-                        <p className="text-xs uppercase tracking-[0.15em] text-slate-600">
+                        <p className="text-xs uppercase tracking-[0.15em] text-slate-400">
                             Game Engine
                         </p>
 
@@ -945,7 +945,7 @@ export default function GameControlPage() {
                 <section className="mt-6 rounded-2xl border border-white/[0.06] bg-[#0d101d] p-5 sm:p-6">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs uppercase tracking-[0.15em] text-slate-600">
+                            <p className="text-xs uppercase tracking-[0.15em] text-slate-400">
                                 Live State
                             </p>
 
@@ -1023,7 +1023,7 @@ export default function GameControlPage() {
                                     Emergency Stop
                                 </h3>
 
-                                <p className="mt-1 max-w-xl text-xs leading-5 text-slate-600">
+                                <p className="mt-1 max-w-xl text-xs leading-5 text-slate-400">
                                     Use this only when
                                     an immediate game
                                     shutdown is required.
@@ -1055,7 +1055,7 @@ export default function GameControlPage() {
                     </div>
                 </section>
 
-                <footer className="py-8 text-center text-xs text-slate-700">
+                <footer className="py-8 text-center text-xs text-slate-500">
                     {siteName} Admin Control Center
                 </footer>
             </div>
@@ -1115,7 +1115,7 @@ function ControlButton({
                         : title}
                 </p>
 
-                <p className="mt-1 text-[12px] text-slate-500">
+                <p className="mt-1 text-[12px] text-slate-400">
                     {description}
                 </p>
             </div>
@@ -1135,7 +1135,7 @@ function StateRow({
 }) {
     return (
         <div className="flex items-center justify-between rounded-xl bg-white/[0.025] px-4 py-3">
-            <span className="text-xs text-slate-600">
+            <span className="text-sm text-slate-400">
                 {label}
             </span>
 

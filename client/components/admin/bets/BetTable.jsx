@@ -147,7 +147,7 @@ export default function BetTable({
 
                     <div>
 
-                        <p className="text-xs uppercase tracking-[0.15em] text-slate-600">
+                        <p className="text-xs uppercase tracking-[0.15em] text-slate-400">
                             Betting Activity
                         </p>
 
@@ -184,7 +184,7 @@ export default function BetTable({
                         No bets found
                     </h3>
 
-                    <p className="mt-1 text-xs text-slate-700">
+                    <p className="mt-1 text-xs text-slate-500">
                         No bets match the
                         current filters.
                     </p>
@@ -377,7 +377,7 @@ export default function BetTable({
                                     return (
                                         <span
                                             key={`${page}-${index}`}
-                                            className="flex h-9 min-w-9 items-center justify-center px-1 text-xs text-slate-700"
+                                            className="flex h-9 min-w-9 items-center justify-center px-1 text-xs text-slate-500"
                                         >
                                             ...
                                         </span>
@@ -544,7 +544,7 @@ function TableHeader({
     children,
 }) {
     return (
-        <th className="px-5 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+        <th className="px-5 py-4 text-[12px] font-bold uppercase tracking-wider text-slate-500">
             {children}
         </th>
     );
@@ -617,7 +617,7 @@ function BetTableRow({
                             {username}
                         </p>
 
-                        <p className="mt-0.5 max-w-[170px] truncate text-[10px] text-slate-700">
+                        <p className="mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">
                             {bet?.user?.email ||
                                 "—"}
                         </p>
@@ -821,7 +821,7 @@ function ResultBadge({
 }) {
     if (!result) {
         return (
-            <span className="text-xs text-slate-700">
+            <span className="text-xs text-slate-500">
                 —
             </span>
         );

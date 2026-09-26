@@ -87,7 +87,7 @@ export default function AdminTable({
                                 text-[11px]
                                 uppercase
                                 tracking-[0.15em]
-                                text-slate-600
+                                text-slate-400
                             "
                                     >
                                         {subtitle}
@@ -149,7 +149,7 @@ export default function AdminTable({
                         {emptyTitle}
                     </h3>
 
-                    <p className="mt-1 text-xs text-slate-700">
+                    <p className="mt-1 text-xs text-slate-500">
                         {emptyMessage}
                     </p>
 

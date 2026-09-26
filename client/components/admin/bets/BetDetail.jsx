@@ -346,7 +346,7 @@ function DetailRow({
                     </p>
 
                     {subValue && (
-                        <p className="mt-0.5 max-w-[180px] truncate text-[10px] text-slate-700">
+                        <p className="mt-0.5 max-w-[180px] truncate text-[10px] text-slate-500">
                             {subValue}
                         </p>
                     )}

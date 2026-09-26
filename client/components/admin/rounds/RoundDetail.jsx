@@ -249,7 +249,7 @@ export default function RoundDetail({
 
                     <div className="mt-5">
 
-                        <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
+                        <p className="mb-3 text-[12px] font-bold uppercase tracking-[0.2em] text-slate-400">
                             Round Statistics
                         </p>
 
@@ -449,7 +449,7 @@ export default function RoundDetail({
 
                             <div>
 
-                                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
+                                <p className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-400">
                                     Bet Details
                                 </p>
 
@@ -472,7 +472,7 @@ export default function RoundDetail({
 
                                 <Receipt
                                     size={20}
-                                    className="mx-auto text-slate-700"
+                                    className="mx-auto text-slate-500"
                                 />
 
                                 <p className="mt-3 text-sm text-slate-500">
@@ -653,7 +653,7 @@ function MiniStat({
     return (
         <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
 
-            <p className="text-[10px] uppercase tracking-wider text-slate-700">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
                 {label}
             </p>
 
@@ -759,7 +759,7 @@ function TimeCard({
 
                 <Clock3
                     size={14}
-                    className="text-slate-700"
+                    className="text-slate-500"
                 />
 
                 <p className="text-[10px] uppercase tracking-wider text-slate-600">
@@ -833,7 +833,7 @@ function BetRow({
                         </p>
 
                         {bet?.user?.email && (
-                            <p className="max-w-[140px] truncate text-[10px] text-slate-700">
+                            <p className="max-w-[140px] truncate text-[10px] text-slate-500">
                                 {bet.user.email}
                             </p>
                         )}
@@ -988,7 +988,7 @@ function ResultBadge({
 }) {
     if (!result) {
         return (
-            <span className="text-xs text-slate-700">
+            <span className="text-xs text-slate-500">
                 —
             </span>
         );

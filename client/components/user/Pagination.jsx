@@ -153,7 +153,7 @@ export default function Pagination({
                             return (
                                 <span
                                     key={`${pageNumber}-${index}`}
-                                    className="flex h-9 min-w-9 items-center justify-center text-xs text-slate-700"
+                                    className="flex h-9 min-w-9 items-center justify-center text-xs text-slate-500"
                                 >
                                     ...
                                 </span>

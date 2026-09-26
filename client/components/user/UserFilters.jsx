@@ -67,7 +67,7 @@ export default function UserFilters({
                         <Search
                             size={15}
                             strokeWidth={2}
-                            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-700"
+                            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
                         />
 
                         <input
@@ -75,7 +75,7 @@ export default function UserFilters({
                             value={search}
                             onChange={(event) => onSearchChange?.(event.target.value)}
                             placeholder={searchPlaceholder}
-                            className="h-11 w-full rounded-xl border border-white/[0.07] bg-[#070914] py-3 pl-9 pr-10 text-xs text-white outline-none transition placeholder:text-slate-700 hover:border-white/[0.12] focus:border-purple-500/40"
+                            className="h-11 w-full rounded-xl border border-white/[0.07] bg-[#070914] py-3 pl-9 pr-10 text-xs text-white outline-none transition placeholder:text-slate-500 hover:border-white/[0.12] focus:border-purple-500/40"
                         />
 
                         {search && (
@@ -84,7 +84,7 @@ export default function UserFilters({
                                 type="button"
                                 onClick={() => onSearchChange?.("")}
                                 aria-label="Clear search"
-                                className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-slate-700 transition hover:text-white"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-slate-500 transition hover:text-white"
                             >
                                 <X size={14} />
                             </button>
@@ -100,7 +100,7 @@ export default function UserFilters({
 
                 <div className="flex flex-wrap items-center gap-2">
 
-                    <div className="hidden items-center gap-1.5 px-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-700 sm:flex">
+                    <div className="hidden items-center gap-1.5 px-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500 sm:flex">
                         <Filter size={12} />
                         Filters
                     </div>
@@ -122,7 +122,7 @@ export default function UserFilters({
 
                         <>
                             <div className="relative w-full sm:w-auto">
-                                <Calendar size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-700" />
+                                <Calendar size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                                 <input
                                     type="date"
                                     value={dateRange.from || ""}
@@ -132,7 +132,7 @@ export default function UserFilters({
                             </div>
 
                             <div className="relative w-full sm:w-auto">
-                                <Calendar size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-700" />
+                                <Calendar size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                                 <input
                                     type="date"
                                     value={dateRange.to || ""}
@@ -168,7 +168,7 @@ export default function UserFilters({
 
                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.05] pt-3">
 
-                    <span className="text-[10px] font-semibold text-slate-700">
+                    <span className="text-[10px] font-semibold text-slate-500">
                         Active filters:
                     </span>
 

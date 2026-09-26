@@ -272,7 +272,7 @@ export default function DeactivateAdminModal({
 
                                 {admin?.email && (
 
-                                    <p className="mt-0.5 truncate text-[11px] text-slate-600">
+                                    <p className="mt-0.5 truncate mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">
                                         {admin.email}
                                     </p>
 

@@ -253,7 +253,7 @@ export default function WalletRequestsPage() {
                                             <td className="px-4 py-3 font-semibold text-white">{formatCurrency(request.amount)}</td>
                                             <td className="px-4 py-3 text-slate-400">
                                                 {request.payoutMethod}
-                                                <div className="text-[11px] text-slate-600">{request.payoutDetails}</div>
+                                                <div className="mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">{request.payoutDetails}</div>
                                             </td>
                                             <td className="px-4 py-3 text-slate-400 capitalize">{request.mode}</td>
                                             <td className="px-4 py-3 text-slate-500">{request.gatewayStatus || "—"}</td>
@@ -364,7 +364,7 @@ export default function WalletRequestsPage() {
                                             <td className="px-4 py-3 font-semibold text-white">{formatCurrency(request.amount)}</td>
                                             <td className="px-4 py-3 text-slate-400">
                                                 {request.referenceId}
-                                                <div className="text-[11px] text-slate-600">{request.method}</div>
+                                                <div className="mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">{request.method}</div>
                                             </td>
                                             <td className="px-4 py-3 text-slate-400 capitalize">{request.initiatedVia}</td>
                                             <td className="px-4 py-3 text-slate-500">

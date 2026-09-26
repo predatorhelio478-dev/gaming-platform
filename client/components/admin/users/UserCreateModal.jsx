@@ -523,7 +523,7 @@ export default function UserCreateModal({
                                     disabled={
                                         actionLoading
                                     }
-                                    className={`h-11 w-full rounded-xl border bg-[#070914] px-3 pr-11 text-sm text-slate-300 outline-none transition placeholder:text-slate-700 ${errors.password
+                                    className={`h-11 w-full rounded-xl border bg-[#070914] px-3 pr-11 text-sm text-slate-300 outline-none transition placeholder:text-slate-500 ${errors.password
                                         ? "border-red-500/30 focus:border-red-500/50"
                                         : "border-white/[0.07] focus:border-purple-500/30"
                                         }`}
@@ -779,7 +779,7 @@ function Field({
                 value={value}
                 onChange={onChange}
                 placeholder={placeholder}
-                className={`h-11 w-full rounded-xl border bg-[#070914] px-3 text-sm text-slate-300 outline-none transition placeholder:text-slate-700 ${error
+                className={`h-11 w-full rounded-xl border bg-[#070914] px-3 text-sm text-slate-300 outline-none transition placeholder:text-slate-500 ${error
                     ? "border-red-500/30 focus:border-red-500/50"
                     : "border-white/[0.07] focus:border-purple-500/30"
                     }`}

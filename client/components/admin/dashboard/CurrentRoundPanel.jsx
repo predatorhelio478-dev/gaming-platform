@@ -27,7 +27,7 @@ export default function CurrentRoundPanel({
 
             <div className="grid gap-6 py-6 md:grid-cols-3">
                 <div className="rounded-2xl border border-white/[0.06] bg-[#080a14] p-5">
-                    <p className="text-xs uppercase tracking-wider text-slate-600">Remaining Time</p>
+                    <p className="text-xs uppercase tracking-wider text-slate-400">Remaining Time</p>
                     <div className="mt-3 flex items-end gap-2">
                         <span className="text-5xl font-black tabular-nums">{formattedTimer}</span>
                         <span className="mb-2 text-sm text-slate-600">sec</span>
@@ -35,7 +35,7 @@ export default function CurrentRoundPanel({
                 </div>
 
                 <div className="rounded-2xl border border-white/[0.06] bg-[#080a14] p-5">
-                    <p className="text-xs uppercase tracking-wider text-slate-600">Game Status</p>
+                    <p className="text-xs uppercase tracking-wider text-slate-400">Game Status</p>
                     <div className="mt-4">
                         <span className={`inline-flex rounded-full border bg-white/[0.03] px-4 py-2 text-sm font-bold ${statusColor}`}>
                             ● {statusLabel}
@@ -44,7 +44,7 @@ export default function CurrentRoundPanel({
                 </div>
 
                 <div className="rounded-2xl border border-white/[0.06] bg-[#080a14] p-5">
-                    <p className="text-xs uppercase tracking-wider text-slate-600">Last Result</p>
+                    <p className="text-xs uppercase tracking-wider text-slate-400">Last Result</p>
                     <div className="mt-3 flex items-center gap-3">
                         <div className={`flex h-11 w-11 items-center justify-center rounded-full text-xs font-black uppercase ${resultClass}`}>
                             {lastResult?.charAt(0) || "—"}

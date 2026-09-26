@@ -915,7 +915,7 @@ export default function UserDetailDrawer({
                                                     font-bold
                                                     uppercase
                                                     tracking-wider
-                                                    text-slate-700
+                                                    text-slate-500
                                                 "
                                             >
                                                 Wallet Balance
@@ -1550,7 +1550,7 @@ function StatCard({
                     font-bold
                     uppercase
                     tracking-wider
-                    text-slate-700
+                    text-slate-500
                 "
             >
                 {label}
@@ -1652,7 +1652,7 @@ function DetailItem({
                     size={12}
                     className="
                         shrink-0
-                        text-slate-700
+                        text-slate-500
                     "
                 />
 
@@ -1709,7 +1709,7 @@ function DetailItem({
                             className="
                                 shrink-0
                                 cursor-pointer
-                                text-slate-700
+                                text-slate-500
                                 transition
                                 hover:text-purple-300
                             "

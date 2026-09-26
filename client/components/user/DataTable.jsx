@@ -46,7 +46,7 @@ export default function DataTable({
 
                             {subtitle && (
 
-                                <p className="text-xs uppercase tracking-[0.15em] text-slate-600">
+                                <p className="text-xs uppercase tracking-[0.15em] text-slate-400">
                                     {subtitle}
                                 </p>
 
@@ -76,7 +76,7 @@ export default function DataTable({
 
                 <div className="px-6 py-16 text-center">
                     <h3 className="text-sm font-bold text-slate-400">{emptyTitle}</h3>
-                    <p className="mt-1 text-xs text-slate-700">{emptyMessage}</p>
+                    <p className="mt-1 text-xs text-slate-500">{emptyMessage}</p>
                 </div>
 
             ) : (

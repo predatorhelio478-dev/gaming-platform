@@ -189,7 +189,7 @@ export default function QuickAccess() {
                                         justify-center
                                         rounded-lg
                                         bg-white/[0.02]
-                                        text-slate-700
+                                        text-slate-500
                                         transition
                                         group-hover:bg-white/[0.05]
                                         group-hover:text-white

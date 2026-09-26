@@ -72,7 +72,7 @@ export default function SettingsHeader({
             </div>
 
             <div className="flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-slate-700">
+                <p className="text-slate-500">
                     Current category:{" "}
                     <span className="font-semibold capitalize text-slate-500">
                         {category}

@@ -1,7 +1,7 @@
 export default function SecurityStatus({ connected, admin }) {
     return (
         <section className="rounded-2xl border border-white/[0.06] bg-[#0d101d] p-5 sm:p-6">
-            <p className="text-xs uppercase tracking-wider text-slate-600">System</p>
+            <p className="text-xs uppercase tracking-wider text-slate-400">System</p>
             <h3 className="mt-1 text-lg font-bold">Security Status</h3>
 
             <div className="mt-5 space-y-3">

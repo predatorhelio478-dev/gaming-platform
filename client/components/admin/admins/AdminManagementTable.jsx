@@ -460,7 +460,7 @@ export default function AdminManagementTable({
                                         className="
                                             mt-1
                                             text-[10px]
-                                            text-slate-700
+                                            text-slate-500
                                         "
                                     >
                                         {

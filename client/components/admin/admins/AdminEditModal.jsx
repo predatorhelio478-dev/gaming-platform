@@ -406,7 +406,7 @@ export default function AdminEditModal({
 
                         {!canAssignSuperAdmin && (
 
-                            <p className="text-[10px] text-slate-700">
+                            <p className="text-[10px] text-slate-500">
                                 Only a super admin can change this account&apos;s username or email.
                             </p>
 
@@ -444,7 +444,7 @@ export default function AdminEditModal({
                                     onChange={handleChange}
                                     disabled={actionLoading}
                                     placeholder="10-15 digit mobile"
-                                    className="h-11 w-full rounded-xl border border-white/[0.07] bg-[#070914] px-3 text-sm text-slate-300 outline-none transition placeholder:text-slate-700 focus:border-purple-500/30 disabled:opacity-50"
+                                    className="h-11 w-full rounded-xl border border-white/[0.07] bg-[#070914] px-3 text-sm text-slate-300 outline-none transition placeholder:text-slate-500 focus:border-purple-500/30 disabled:opacity-50"
                                 />
                             </div>
 
@@ -496,7 +496,7 @@ export default function AdminEditModal({
 
                         {!canAssignSuperAdmin && admin?.role !== "super_admin" && (
 
-                            <p className="text-[10px] text-slate-700">
+                            <p className="text-[10px] text-slate-500">
                                 Only a super admin can promote this account to Super Admin.
                             </p>
 

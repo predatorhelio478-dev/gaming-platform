@@ -70,7 +70,7 @@ export default function SettingsSidebar({
         <aside className="w-full shrink-0 lg:w-[250px]">
             <div className="rounded-2xl border border-white/[0.06] bg-[#0d101d] p-2">
                 <div className="px-3 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
                         Configuration
                     </p>
 

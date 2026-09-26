@@ -152,7 +152,7 @@ export default function RoundTable({
                 <div className="flex items-center justify-between">
 
                     <div>
-                        <p className="text-xs uppercase tracking-[0.15em] text-slate-600">
+                        <p className="text-xs uppercase tracking-[0.15em] text-slate-400">
                             Round History
                         </p>
 
@@ -184,7 +184,7 @@ export default function RoundTable({
                         No rounds found
                     </h3>
 
-                    <p className="mt-1 text-xs text-slate-700">
+                    <p className="mt-1 text-xs text-slate-500">
                         No rounds match the
                         current filters.
                     </p>
@@ -366,7 +366,7 @@ export default function RoundTable({
                                     return (
                                         <span
                                             key={`${page}-${index}`}
-                                            className="flex h-9 min-w-9 items-center justify-center px-1 text-xs text-slate-700"
+                                            className="flex h-9 min-w-9 items-center justify-center px-1 text-xs text-slate-500"
                                         >
                                             ...
                                         </span>
@@ -686,7 +686,7 @@ function RoundTableRow({
 
                     <Clock3
                         size={13}
-                        className="text-slate-700"
+                        className="text-slate-500"
                     />
 
                     <span className="text-xs text-slate-500">
@@ -708,7 +708,7 @@ function RoundTableRow({
 
                     <Clock3
                         size={13}
-                        className="text-slate-700"
+                        className="text-slate-500"
                     />
 
                     <span className="text-xs text-slate-500">
@@ -822,7 +822,7 @@ function ResultBadge({
 }) {
     if (!result) {
         return (
-            <span className="text-xs text-slate-700">
+            <span className="text-xs text-slate-500">
                 —
             </span>
         );

@@ -444,15 +444,15 @@ export default function AdminSupportPage() {
                                         <span className="h-2 w-2 shrink-0 rounded-full bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.8)]" />
                                     )}
                                     <div>
-                                        <p className="font-semibold text-white">{item.subject}</p>
-                                        <p className="text-[11px] text-slate-600">{item.ticketNumber}</p>
+                                        <p className="max-w-[150px] truncate text-sm font-bold text-white">{item.subject}</p>
+                                        <p className="mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">{item.ticketNumber}</p>
                                     </div>
                                 </div>
                             </AdminTableCell>
-                            <AdminTableCell className="text-slate-400">
+                            <AdminTableCell className="text-slate-400 text-sm">
                                 {item.user?.fullName || item.user?.username || "-"}
                             </AdminTableCell>
-                            <AdminTableCell className="capitalize text-slate-400">{item.category}</AdminTableCell>
+                            <AdminTableCell className="capitalize text-slate-400 text-sm">{item.category}</AdminTableCell>
                             <AdminTableCell>
                                 <AdminBadge variant={PRIORITY_VARIANT[item.priority]}>{item.priority}</AdminBadge>
                             </AdminTableCell>
@@ -652,7 +652,7 @@ export default function AdminSupportPage() {
                                     )}
 
                                     {ticket.internalNote?.text && !noteEditing && (
-                                        <p className="mt-1 text-[10px] text-slate-600">
+                                        <p className="mt-1 text-[12px] text-slate-400">
                                             Last updated by {ticket.internalNote.updatedByName || "an admin"} on {formatDate(ticket.internalNote.updatedAt)}
                                         </p>
                                     )}
@@ -672,12 +672,12 @@ export default function AdminSupportPage() {
                                     {showNoteHistory && (
                                         <div className="mt-2 space-y-2 rounded-xl border border-white/[0.06] bg-black/10 p-3">
                                             {[...ticket.internalNoteHistory].reverse().map((entry) => (
-                                                <div key={entry._id} className="text-[11px] leading-5 text-slate-500">
+                                                <div key={entry._id} className="text-[12px] leading-5 text-slate-500">
                                                     <p className="font-bold text-slate-400">
                                                         {entry.changedByName || "An admin"} - {formatDate(entry.changedAt)}
                                                     </p>
                                                     <p>
-                                                        <span className="text-slate-600">{entry.previousText || "(empty)"}</span>
+                                                        <span className="text-slate-500">{entry.previousText || "(empty)"}</span>
                                                         {" -> "}
                                                         <span className="text-slate-300">{entry.newText || "(empty)"}</span>
                                                     </p>
@@ -715,7 +715,7 @@ export default function AdminSupportPage() {
                                             maxLength={2000}
                                             rows={1}
                                             placeholder={ticket.status === "closed" ? "Ticket is closed - change status to reopen" : "Type your reply..."}
-                                            className="flex-1 rounded-xl border border-white/10 bg-[#070914] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 disabled:opacity-50"
+                                            className="flex-1 rounded-xl border border-white/10 bg-[#070914] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-400 disabled:opacity-70"
                                         />
                                         <button
                                             type="submit"

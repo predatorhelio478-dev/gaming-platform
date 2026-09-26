@@ -880,7 +880,7 @@ export default function WalletAdjustModal({
                                         font-semibold
                                         text-white
                                         outline-none
-                                        placeholder:text-slate-700
+                                        placeholder:text-slate-500
                                         disabled:cursor-not-allowed
                                     "
                                 />

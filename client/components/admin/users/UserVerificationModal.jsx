@@ -117,7 +117,7 @@ export default function UserVerificationModal({
                                 {actionLabel}
                             </h2>
 
-                            <p className="mt-0.5 text-[10px] text-slate-700">
+                            <p className="mt-0.5 text-[10px] text-slate-500">
                                 Manual override - no OTP required
                             </p>
 
@@ -149,7 +149,7 @@ export default function UserVerificationModal({
 
                             <div className="min-w-0 flex-1">
                                 <p className="truncate text-xs font-bold text-white">{contactValue}</p>
-                                <p className="mt-0.5 truncate text-[11px] text-slate-600">
+                                <p className="mt-0.5 truncate mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">
                                     {user?.fullName || user?.username || "This user"}
                                 </p>
                             </div>

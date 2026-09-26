@@ -1643,7 +1643,7 @@ export default function PayoutsPage() {
 
                         <div className="flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
 
-                            <div className="flex items-center gap-2 text-slate-700">
+                            <div className="flex items-center gap-2 text-slate-500">
 
                                 <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
 
@@ -1652,7 +1652,7 @@ export default function PayoutsPage() {
                             </div>
 
 
-                            <div className="text-slate-700">
+                            <div className="text-slate-500">
 
                                 {lastUpdated
                                     ? `Last refreshed: ${lastUpdated.toLocaleTimeString(
@@ -1754,7 +1754,7 @@ export default function PayoutsPage() {
                                 Loading payouts...
                             </p>
 
-                            <p className="mt-1 text-xs text-slate-700">
+                            <p className="mt-1 text-xs text-slate-500">
                                 Fetching payout history
                             </p>
 
@@ -1788,7 +1788,7 @@ export default function PayoutsPage() {
                     FOOTER
                 ================================================== */}
 
-                <div className="mt-4 flex items-center justify-between gap-3 text-[10px] text-slate-700">
+                <div className="mt-4 flex items-center justify-between gap-3 text-[10px] text-slate-500">
 
                     <div className="flex items-center gap-2">
 

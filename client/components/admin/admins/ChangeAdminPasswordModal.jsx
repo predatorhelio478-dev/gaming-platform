@@ -134,7 +134,7 @@ export default function ChangeAdminPasswordModal({
                             placeholder="Minimum 8 characters"
                             disabled={actionLoading}
                             autoFocus
-                            className="h-11 w-full rounded-xl border border-white/[0.07] bg-[#070914] px-3 pr-11 text-sm text-slate-300 outline-none transition placeholder:text-slate-700 focus:border-purple-500/30 disabled:opacity-50"
+                            className="h-11 w-full rounded-xl border border-white/[0.07] bg-[#070914] px-3 pr-11 text-sm text-slate-300 outline-none transition placeholder:text-slate-500 focus:border-purple-500/30 disabled:opacity-50"
                         />
 
                         <button

@@ -126,7 +126,7 @@ export default function AdminSidebar() {
                 </div>
 
                 <nav className="flex-1 overflow-y-auto p-4">
-                    <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
+                    <p className="mb-3 px-3 text-[12px] font-bold uppercase tracking-[0.2em] text-slate-400">
                         Management
                     </p>
 

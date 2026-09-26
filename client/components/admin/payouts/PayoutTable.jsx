@@ -78,7 +78,7 @@ export default function PayoutTable({
 
                     <div>
 
-                        <p className="text-xs uppercase tracking-[0.15em] text-slate-600">
+                        <p className="text-xs uppercase tracking-[0.15em] text-slate-400">
                             Payout Activity
                         </p>
 
@@ -113,7 +113,7 @@ export default function PayoutTable({
                         No payouts found
                     </h3>
 
-                    <p className="mt-1 text-xs text-slate-700">
+                    <p className="mt-1 text-xs text-slate-500">
                         No payout records match
                         the current filters.
                     </p>

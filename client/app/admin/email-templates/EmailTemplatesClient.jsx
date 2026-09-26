@@ -145,15 +145,15 @@ export default function AdminEmailTemplatesPage() {
                         <AdminTableRow key={template.key}>
                             <AdminTableCell>
                                 <p className="font-semibold text-white">{template.name}</p>
-                                <p className="mt-0.5 text-[11px] text-slate-600">{template.description}</p>
+                                <p className="mt-0.5 mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">{template.description}</p>
                             </AdminTableCell>
-                            <AdminTableCell className="max-w-[280px] truncate text-slate-400">{template.subject}</AdminTableCell>
+                            <AdminTableCell className="max-w-[280px] truncate text-slate-400 text-sm">{template.subject}</AdminTableCell>
                             <AdminTableCell>
                                 <AdminBadge variant={template.isActive ? "success" : "default"}>
                                     {template.isActive ? "Active" : "Disabled"}
                                 </AdminBadge>
                             </AdminTableCell>
-                            <AdminTableCell className="text-slate-500">
+                            <AdminTableCell className="text-slate-500 text-xs">
                                 {template.updatedAt ? new Date(template.updatedAt).toLocaleString("en-IN") : "-"}
                             </AdminTableCell>
                             <AdminTableCell>

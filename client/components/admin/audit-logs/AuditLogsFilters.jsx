@@ -124,7 +124,7 @@ export default function AuditLogsFilters({
                         Filters
                     </h2>
 
-                    <p className="text-[10px] uppercase tracking-[0.15em] text-slate-700">
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500">
                         Find specific activity
                     </p>
                 </div>
@@ -141,7 +141,7 @@ export default function AuditLogsFilters({
                 >
                     <Search
                         size={15}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-700"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
                     />
 
                     <input
@@ -153,7 +153,7 @@ export default function AuditLogsFilters({
                             )
                         }
                         placeholder="Search logs..."
-                        className="h-11 w-full rounded-xl border border-white/[0.07] bg-[#070914] pl-9 pr-3 text-sm text-slate-300 outline-none transition placeholder:text-slate-700 focus:border-purple-500/40"
+                        className="h-11 w-full rounded-xl border border-white/[0.07] bg-[#070914] pl-9 pr-3 text-sm text-slate-300 outline-none transition placeholder:text-slate-500 focus:border-purple-500/40"
                     />
                 </form>
 
@@ -229,7 +229,7 @@ function DateInput({
 
             <CalendarDays
                 size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-700"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
             />
 
             <input

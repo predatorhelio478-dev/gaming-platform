@@ -284,7 +284,7 @@ export default function SupportPage() {
                                                         )}
                                                         <span className="font-semibold text-white">{item.subject}</span>
                                                     </div>
-                                                    <p className="mt-0.5 text-[11px] text-slate-600">{item.ticketNumber}</p>
+                                                    <p className="mt-0.5 mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">{item.ticketNumber}</p>
                                                 </DataTableCell>
                                                 <DataTableCell className="capitalize text-slate-400">{item.category}</DataTableCell>
                                                 <DataTableCell><PriorityBadge priority={item.priority} /></DataTableCell>
@@ -368,13 +368,13 @@ export default function SupportPage() {
                                         <option key={c} value={c} className="capitalize">{c}</option>
                                     ))}
                                 </select>
-                                <p className="mt-1 text-[11px] text-slate-600">Priority is set automatically based on category.</p>
+                                <p className="mt-1 mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">Priority is set automatically based on category.</p>
                             </div>
 
                             <div>
                                 <label className="mb-2 block text-sm font-medium text-slate-300">Message</label>
                                 <textarea value={message} onChange={(e) => setMessage(e.target.value)} disabled={createBusy} maxLength={2000} rows={6} placeholder="Describe your issue in detail..." className={inputClass} />
-                                <p className="mt-1 text-right text-[11px] text-slate-600">{message.length}/2000</p>
+                                <p className="mt-1 text-right mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">{message.length}/2000</p>
                             </div>
 
                             <button type="submit" disabled={createBusy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50">
@@ -403,7 +403,7 @@ export default function SupportPage() {
                                         <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold capitalize text-slate-400">{ticket.category}</span>
                                     </div>
                                     <h1 className="mt-3 text-xl font-bold text-white">{ticket.subject}</h1>
-                                    <p className="mt-1 text-[12px] text-slate-500">{ticket.ticketNumber} - Created {formatDate(ticket.createdAt)}</p>
+                                    <p className="mt-1 text-[12px] text-slate-400">{ticket.ticketNumber} - Created {formatDate(ticket.createdAt)}</p>
                                 </div>
 
                                 <div className="mt-4 max-h-[480px] space-y-3 overflow-y-auto rounded-2xl border border-white/[0.06] bg-white/[0.01] p-4">

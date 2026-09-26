@@ -821,7 +821,7 @@ export default function UserBalanceModal({
                                         text-slate-300
                                         outline-none
                                         transition
-                                        placeholder:text-slate-700
+                                        placeholder:text-slate-500
                                         ${errors.amount
                                             ? "border-red-500/30 focus:border-red-500/50"
                                             : "border-white/[0.07] focus:border-purple-500/30"
@@ -862,7 +862,7 @@ export default function UserBalanceModal({
                                     font-bold
                                     uppercase
                                     tracking-[0.12em]
-                                    text-slate-700
+                                    text-slate-500
                                 "
                             >
                                 Quick Amount
@@ -1011,7 +1011,7 @@ export default function UserBalanceModal({
                                     text-slate-300
                                     outline-none
                                     transition
-                                    placeholder:text-slate-700
+                                    placeholder:text-slate-500
                                     ${errors.remark
                                         ? "border-red-500/30 focus:border-red-500/50"
                                         : "border-white/[0.07] focus:border-purple-500/30"
@@ -1045,7 +1045,7 @@ export default function UserBalanceModal({
                                     <p
                                         className="
                                             text-[10px]
-                                            text-slate-700
+                                            text-slate-500
                                         "
                                     >
                                         Reason will be saved with the transaction.
@@ -1057,7 +1057,7 @@ export default function UserBalanceModal({
                                 <span
                                     className="
                                         text-[10px]
-                                        text-slate-700
+                                        text-slate-500
                                     "
                                 >
                                     {formData.remark.length}/500

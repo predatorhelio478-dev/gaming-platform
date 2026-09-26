@@ -80,7 +80,7 @@ function AuditLogRow({
                                 "System"}
                         </p>
 
-                        <p className="mt-1 max-w-[180px] truncate text-[12px] text-slate-700">
+                        <p className="mt-1 max-w-[180px] truncate text-[12px] text-slate-500">
                             {log.actorId || "—"}
                         </p>
                     </div>
@@ -104,7 +104,7 @@ function AuditLogRow({
                 </p>
 
                 {log.category && (
-                    <p className="mt-1 text-[12px] text-slate-700">
+                    <p className="mt-1 text-[12px] text-slate-400">
                         {log.category}
                     </p>
                 )}
@@ -118,7 +118,7 @@ function AuditLogRow({
                         {log.key}
                     </code>
                 ) : (
-                    <span className="text-slate-700">
+                    <span className="text-slate-500">
                         —
                     </span>
                 )}

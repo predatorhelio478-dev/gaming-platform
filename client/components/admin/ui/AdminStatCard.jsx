@@ -44,7 +44,7 @@ export default function AdminStatCard({
 
                 <div className="min-w-0">
 
-                    <p className="truncate text-xs font-semibold uppercase tracking-wider text-slate-600">
+                    <p className="truncate text-xs font-semibold uppercase tracking-wider text-slate-400">
                         {label}
                     </p>
 
@@ -53,7 +53,7 @@ export default function AdminStatCard({
                     </p>
 
                     {hint && (
-                        <p className="mt-1 text-[12px] text-slate-500">
+                        <p className="mt-1 text-[12px] text-slate-400">
                             {hint}
                         </p>
                     )}
