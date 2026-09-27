@@ -85,9 +85,17 @@ const getMissingSmtpVars = () => {
 
 };
 
+const getMissingEmailVars = () => {
+
+    return getEmailProvider() === "brevo"
+        ? getMissingBrevoVars()
+        : getMissingSmtpVars();
+
+};
+
 const isEmailConfigured = () => {
 
-    return getMissingSmtpVars().length === 0;
+    return getMissingEmailVars().length === 0;
 
 };
 
@@ -186,6 +194,251 @@ const getTransporter = () => {
 
 /*
  * ==========================================
+ * BREVO (HTTPS Transactional Email API)
+ * ==========================================
+ *
+ * Opt-in via EMAIL_PROVIDER=brevo. Exists because some hosts
+ * (Render Free) block outbound SMTP ports entirely, so every
+ * nodemailer send ends in ETIMEDOUT - Brevo's API goes over
+ * plain HTTPS (443) instead. When EMAIL_PROVIDER is unset or
+ * "smtp", none of this runs and the SMTP path above is used
+ * exactly as before (local development).
+ *
+ * Reads BREVO_API_KEY (never logged) and BREVO_SENDER_EMAIL
+ * (falls back to SMTP_FROM / SMTP_USER). The sender address
+ * must be a verified sender in the Brevo dashboard.
+ */
+
+const BREVO_API_BASE = "https://api.brevo.com/v3";
+
+const BREVO_TIMEOUT_MS = 15000;
+
+const getEmailProvider = () => {
+
+    return String(process.env.EMAIL_PROVIDER || "smtp").trim().toLowerCase() === "brevo"
+        ? "brevo"
+        : "smtp";
+
+};
+
+// SMTP_FROM may be a bare address or `"Name" <addr>` - Brevo
+// wants the bare address, so pull it out of the angle brackets.
+const extractAddress = (value) => {
+
+    const raw = String(value || "").trim();
+
+    const match = raw.match(/<([^>]+)>/);
+
+    return (match ? match[1] : raw).trim();
+
+};
+
+const getBrevoSenderEmail = () => {
+
+    return extractAddress(
+        process.env.BREVO_SENDER_EMAIL ||
+        process.env.SMTP_FROM ||
+        process.env.SMTP_USER
+    );
+
+};
+
+const getMissingBrevoVars = () => {
+
+    const missing = [];
+
+    if (!String(process.env.BREVO_API_KEY || "").trim()) {
+
+        missing.push("BREVO_API_KEY");
+
+    }
+
+    if (!getBrevoSenderEmail()) {
+
+        missing.push("BREVO_SENDER_EMAIL");
+
+    }
+
+    return missing;
+
+};
+
+/*
+ * Same idea as classifySmtpErrorReason - a specific, actionable
+ * reason instead of a generic failure. Only reads the HTTP
+ * status and Brevo's own error body, never the API key.
+ */
+const classifyBrevoErrorReason = (status, body, error) => {
+
+    if (error) {
+
+        if (error.name === "TimeoutError" || error.name === "AbortError") {
+
+            return "Brevo API request timed out";
+
+        }
+
+        return `Brevo API request failed - ${error.message || "network error"}`;
+
+    }
+
+    const detail =
+        body?.message || body?.code || `HTTP ${status}`;
+
+    if (status === 401) {
+
+        return `Brevo authentication failed - check BREVO_API_KEY (${detail})`;
+
+    }
+
+    if (status === 400 && /sender/i.test(String(detail))) {
+
+        return `Brevo rejected the sender - verify BREVO_SENDER_EMAIL in the Brevo dashboard (${detail})`;
+
+    }
+
+    return `Brevo API error: ${detail}`;
+
+};
+
+const brevoRequest = async (path, { method = "GET", body } = {}) => {
+
+    const response = await fetch(`${BREVO_API_BASE}${path}`, {
+
+        method,
+
+        headers: {
+            "api-key": String(process.env.BREVO_API_KEY).trim(),
+            "content-type": "application/json",
+            accept: "application/json",
+        },
+
+        body: body ? JSON.stringify(body) : undefined,
+
+        signal: AbortSignal.timeout(BREVO_TIMEOUT_MS),
+
+    });
+
+    const data =
+        await response.json().catch(() => null);
+
+    return { ok: response.ok, status: response.status, data };
+
+};
+
+const toBrevoRecipients = (to) => {
+
+    const list =
+        Array.isArray(to) ? to : String(to || "").split(",");
+
+    return list
+        .map((entry) => extractAddress(entry))
+        .filter(Boolean)
+        .map((email) => ({ email }));
+
+};
+
+const sendViaBrevo = async ({ to, subject, text, html, senderName }) => {
+
+    const sender = {
+        email: getBrevoSenderEmail(),
+    };
+
+    const name =
+        String(senderName || process.env.BREVO_SENDER_NAME || "").trim().replace(/"/g, "");
+
+    if (name) {
+
+        sender.name = name;
+
+    }
+
+    const payload = {
+        sender,
+        to: toBrevoRecipients(to),
+        subject,
+        htmlContent: html,
+    };
+
+    if (text) {
+
+        payload.textContent = text;
+
+    }
+
+    let result;
+
+    try {
+
+        result =
+            await brevoRequest("/smtp/email", { method: "POST", body: payload });
+
+    } catch (error) {
+
+        return { sent: false, reason: classifyBrevoErrorReason(null, null, error) };
+
+    }
+
+    if (!result.ok) {
+
+        return { sent: false, reason: classifyBrevoErrorReason(result.status, result.data) };
+
+    }
+
+    return { sent: true };
+
+};
+
+// Brevo counterpart of transporter.verify(): checks the API key
+// against GET /account without sending anything.
+const verifyBrevoConnection = async () => {
+
+    const missing =
+        getMissingBrevoVars();
+
+    if (missing.length > 0) {
+
+        return {
+            ok: false,
+            reason: `Brevo not configured (missing: ${missing.join(", ")})`,
+        };
+
+    }
+
+    try {
+
+        const result =
+            await brevoRequest("/account");
+
+        if (result.ok) {
+
+            return { ok: true };
+
+        }
+
+        const reason =
+            classifyBrevoErrorReason(result.status, result.data);
+
+        console.error(`[emailService] Brevo API verification failed: ${reason}`);
+
+        return { ok: false, reason };
+
+    } catch (error) {
+
+        const reason =
+            classifyBrevoErrorReason(null, null, error);
+
+        console.error(`[emailService] Brevo API verification failed: ${reason}`);
+
+        return { ok: false, reason };
+
+    }
+
+};
+
+
+/*
+ * ==========================================
  * SEND EMAIL
  * ==========================================
  *
@@ -196,15 +449,18 @@ const getTransporter = () => {
 
 const sendEmail = async ({ to, subject, text, html, heading, ctaText, ctaUrl }) => {
 
+    const provider =
+        getEmailProvider();
+
     if (!isEmailConfigured()) {
 
         const missing =
-            getMissingSmtpVars();
+            getMissingEmailVars();
 
         if (!warnedNotConfigured) {
 
             console.warn(
-                `[emailService] SMTP is not configured - missing: ${missing.join(", ")}. Emails will not be sent.`
+                `[emailService] ${provider === "brevo" ? "Brevo" : "SMTP"} is not configured - missing: ${missing.join(", ")}. Emails will not be sent.`
             );
 
             warnedNotConfigured = true;
@@ -223,7 +479,7 @@ const sendEmail = async ({ to, subject, text, html, heading, ctaText, ctaUrl }) 
 
         return {
             sent: false,
-            reason: `SMTP not configured (missing: ${missing.join(", ")})`,
+            reason: `${provider === "brevo" ? "Brevo" : "SMTP"} not configured (missing: ${missing.join(", ")})`,
         };
 
     }
@@ -257,6 +513,21 @@ const sendEmail = async ({ to, subject, text, html, heading, ctaText, ctaUrl }) 
                 ctaText,
                 ctaUrl,
             });
+
+        if (provider === "brevo") {
+
+            const result =
+                await sendViaBrevo({ to, subject, text, html: wrappedHtml, senderName });
+
+            if (!result.sent) {
+
+                console.error(`[emailService] Send failed: ${result.reason}`);
+
+            }
+
+            return result;
+
+        }
 
         await getTransporter().sendMail({
 
@@ -315,6 +586,12 @@ const sendEmail = async ({ to, subject, text, html, heading, ctaText, ctaUrl }) 
  */
 
 const verifySmtpConnection = async () => {
+
+    if (getEmailProvider() === "brevo") {
+
+        return verifyBrevoConnection();
+
+    }
 
     const missing =
         getMissingSmtpVars();
@@ -395,6 +672,7 @@ const sendEmailBestEffort = (params, label) => {
 
 
 module.exports = {
+    getEmailProvider,
     isEmailConfigured,
     sendEmail,
     sendEmailBestEffort,

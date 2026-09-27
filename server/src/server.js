@@ -88,10 +88,12 @@ emailService.verifySmtpConnection()
         if (result.ok) {
 
             console.log(
-                "[emailService] SMTP connection verified - real emails will be sent."
+                emailService.getEmailProvider() === "brevo"
+                    ? "[emailService] Brevo API key verified - real emails will be sent via Brevo."
+                    : "[emailService] SMTP connection verified - real emails will be sent."
             );
 
-        } else if (result.reason?.startsWith("SMTP not configured")) {
+        } else if (/^(SMTP|Brevo) not configured/.test(result.reason || "")) {
 
             console.warn(
                 `[emailService] ${result.reason} - OTP/notification emails will use the dev-only console fallback.`
@@ -100,7 +102,7 @@ emailService.verifySmtpConnection()
         } else {
 
             console.error(
-                "[emailService] SMTP is configured but the connection/authentication check failed:",
+                `[emailService] ${emailService.getEmailProvider() === "brevo" ? "Brevo" : "SMTP"} is configured but the connection/authentication check failed:`,
                 result.reason
             );
 
