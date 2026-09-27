@@ -37,6 +37,7 @@ export default function WithdrawalPage() {
 
     const [withdrawalMode, setWithdrawalMode] = useState("manual");
     const [user, setUser] = useState(null);
+    const [verificationRequired, setVerificationRequired] = useState(null);
 
     const [amount, setAmount] = useState("");
     const [payoutMethod, setPayoutMethod] = useState("bank_transfer");
@@ -126,14 +127,26 @@ export default function WithdrawalPage() {
                 if (mode === "automatic") {
                     setWithdrawalMode("automatic");
                 }
+                setVerificationRequired({
+                    email: response?.data?.user?.email_verification_required === true,
+                    mobile: response?.data?.user?.mobile_verification_required === true,
+                });
             })
-            .catch(() => {});
+            // The backend is the real gate either way - if settings
+            // can't be loaded, don't block the form on a guess.
+            .catch(() => setVerificationRequired({ email: false, mobile: false }));
     }, []);
 
-    const missingVerification = [
-        !user?.emailVerified && "email",
-        !user?.mobileVerified && "mobile number",
-    ].filter(Boolean);
+    // Each channel is only required when its own admin setting is
+    // ON - mirrors withdrawalService's gate. Nothing is flagged
+    // until settings have loaded, so there's no flash of a
+    // "verify" banner that then disappears.
+    const missingVerification = verificationRequired
+        ? [
+            verificationRequired.email && !user?.emailVerified && "email",
+            verificationRequired.mobile && !user?.mobileVerified && "mobile number",
+        ].filter(Boolean)
+        : [];
 
     const handleSubmit = async (event) => {
         event.preventDefault();
@@ -222,7 +235,7 @@ export default function WithdrawalPage() {
 
                 {missingVerification.length > 0 && (
                     <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-                        Withdrawals require a verified account. Please verify your {missingVerification.join(" and ")} in{" "}
+                        Withdrawals require a verified {missingVerification.join(" and ")}. Please verify your {missingVerification.join(" and ")} in{" "}
                         <a href="/settings" className="font-semibold underline">Settings</a> before withdrawing.
                     </div>
                 )}

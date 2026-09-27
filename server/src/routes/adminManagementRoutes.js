@@ -42,11 +42,30 @@ router.patch(
     adminManagementController.updateAdmin
 );
 
+// BULK permanent delete - registered BEFORE "/:id" so "bulk"
+// is never read as an admin id. Same role gate as the single
+// Delete; every id is re-checked in adminManagementService.
+router.delete(
+    "/bulk",
+    adminAuth,
+    requireAdminRole("super_admin", "admin"),
+    adminManagementController.bulkDeleteAdmins
+);
+
 router.delete(
     "/:id",
     adminAuth,
     requireAdminRole("super_admin", "admin"),
     adminManagementController.deactivateAdmin
+);
+
+// Permanent delete - same role gate as deactivate; self-delete
+// and the super_admin hierarchy are re-checked in the service.
+router.delete(
+    "/:id/permanent",
+    adminAuth,
+    requireAdminRole("super_admin", "admin"),
+    adminManagementController.deleteAdmin
 );
 
 // Route-gated to super_admin only, and re-checked independently

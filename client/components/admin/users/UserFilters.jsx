@@ -56,6 +56,13 @@ export default function UserFilters({
             label: "Blocked",
         },
 
+        // Deactivated / deleted accounts are hidden from every
+        // other view - only listed when asked for explicitly.
+        {
+            value: "deleted",
+            label: "Deleted / Deactivated",
+        },
+
     ];
 
 

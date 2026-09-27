@@ -8,6 +8,7 @@ import {
     CheckCircle2,
     Ban,
     KeyRound,
+    Trash2,
 } from "lucide-react";
 
 import AdminTable, {
@@ -16,6 +17,7 @@ import AdminTable, {
 } from "../ui/AdminTable";
 
 import AdminBadge from "../ui/AdminBadge";
+import AdminCheckbox from "../ui/AdminCheckbox";
 import AdminPagination from "../ui/AdminPagination";
 
 
@@ -40,12 +42,55 @@ export default function AdminManagementTable({
     onEdit,
     onReactivate,
     onDeactivate,
+    onDelete,
+    bulkEnabled = false,
+    selectedIds = [],
+    onSelectionChange,
+    onBulkDelete,
     onChangePassword,
     actionLoading = false,
     onPageChange,
 }) {
 
     const isSuperAdminViewer = currentAdminRole === "super_admin";
+
+    // ==================================================
+    // BULK SELECTION (checkbox column + Delete Selected)
+    // ==================================================
+    //
+    // Only rows the viewer could delete one-by-one are
+    // selectable - never their own account. The server
+    // re-validates every id with the single-delete rules.
+
+    const isSelectable =
+        (admin) => bulkEnabled && Boolean(currentAdminId) && String(admin?._id) !== String(currentAdminId) && (isSuperAdminViewer || admin?.role !== "super_admin");
+
+    const selectableIds =
+        admins
+            .filter(isSelectable)
+            .map((admin) => String(admin?._id));
+
+    const selectedSet =
+        new Set(selectedIds.map(String));
+
+    const selectedCount =
+        selectableIds.filter((id) => selectedSet.has(id)).length;
+
+    const allSelected =
+        selectableIds.length > 0 &&
+        selectedCount === selectableIds.length;
+
+    const toggleOne =
+        (id, checked) => {
+            const next = new Set(selectedSet);
+            if (checked) next.add(id); else next.delete(id);
+            onSelectionChange?.([...next]);
+        };
+
+    const toggleAll =
+        (checked) => {
+            onSelectionChange?.(checked ? selectableIds : []);
+        };
 
     const page =
         Number(
@@ -119,6 +164,26 @@ export default function AdminManagementTable({
         },
 
     ];
+
+    // Checkbox column first when bulk delete is available.
+    const tableHeaders =
+        bulkEnabled
+            ? [
+                {
+                    key: "select",
+                    label: (
+                        <AdminCheckbox
+                            ariaLabel="Select all"
+                            checked={allSelected}
+                            indeterminate={selectedCount > 0}
+                            disabled={selectableIds.length === 0}
+                            onChange={toggleAll}
+                        />
+                    ),
+                },
+                ...headers,
+            ]
+            : headers;
 
 
     // ==================================================
@@ -280,7 +345,20 @@ export default function AdminManagementTable({
             }
 
             headers={
-                headers
+                tableHeaders
+            }
+            headerAction={
+                selectedCount > 0 && (
+                    <button
+                        type="button"
+                        onClick={onBulkDelete}
+                        disabled={actionLoading}
+                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/[0.05] px-3 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <Trash2 size={13} />
+                        Delete Selected ({selectedCount})
+                    </button>
+                )
             }
             empty={
                 isEmpty
@@ -331,7 +409,34 @@ export default function AdminManagementTable({
                                 admin?._id ||
                                 admin?.username
                             }
+                            className={
+                                selectedSet.has(String(admin?._id))
+                                    ? "bg-purple-500/[0.04]"
+                                    : ""
+                            }
                         >
+
+                            {bulkEnabled && (
+
+                                <AdminTableCell className="w-10">
+
+                                    <AdminCheckbox
+                                        ariaLabel="Select row"
+                                        checked={selectedSet.has(String(admin?._id))}
+                                        disabled={!isSelectable(admin)}
+                                        title={
+                                            isSelf
+                                                ? "You cannot delete your own account"
+                                                : !isSelectable(admin)
+                                                    ? "You cannot delete this account"
+                                                    : "Select"
+                                        }
+                                        onChange={(checked) => toggleOne(String(admin?._id), checked)}
+                                    />
+
+                                </AdminTableCell>
+
+                            )}
 
                             {/* =================================================
                                 ADMIN
@@ -753,7 +858,10 @@ export default function AdminManagementTable({
                                         // side (see adminManagementService),
                                         // so this is a UI convenience, not
                                         // the actual enforcement.
-                                        !isSelf && (
+                                        // Also hidden until the logged-in
+                                        // admin is known, so the own row
+                                        // never flashes a Delete button.
+                                        currentAdminId && !isSelf && (
 
                                             <button
                                                 type="button"
@@ -796,6 +904,60 @@ export default function AdminManagementTable({
                                             </button>
 
                                         )
+
+                                    )}
+
+
+                                    {/* =================================================
+                                        DELETE (permanent) - every other
+                                        account, never your own. Same
+                                        hierarchy as Deactivate (disabled
+                                        with an explanation where not
+                                        permitted); enforced server-side.
+                                    ================================================== */}
+
+                                    {currentAdminId && !isSelf && (
+
+                                        <button
+                                            type="button"
+                                            disabled={
+                                                actionLoading ||
+                                                !canManage
+                                            }
+                                            onClick={() =>
+                                                onDelete?.(
+                                                    admin
+                                                )
+                                            }
+                                            title={
+                                                !canManage
+                                                    ? "Only a super admin can delete another super admin"
+                                                    : "Delete admin"
+                                            }
+                                            className="
+                                                inline-flex
+                                                cursor-pointer
+                                                items-center
+                                                justify-center
+                                                rounded-lg
+                                                border
+                                                border-red-500/20
+                                                bg-red-500/[0.05]
+                                                p-2
+                                                text-red-400
+                                                transition
+                                                hover:bg-red-500/[0.10]
+                                                hover:text-red-300
+                                                disabled:cursor-not-allowed
+                                                disabled:opacity-40
+                                            "
+                                        >
+
+                                            <Trash2
+                                                size={14}
+                                            />
+
+                                        </button>
 
                                     )}
 

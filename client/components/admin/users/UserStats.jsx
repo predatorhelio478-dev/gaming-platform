@@ -47,6 +47,18 @@ export default function UserStats({
             value: stats?.verifiedUsers ?? 0,
             icon: ShieldCheck,
             color: "blue",
+            // Counted against what's currently required (same
+            // rule as withdrawals) - say which, so the number
+            // is never read as "verified email AND mobile".
+            hint: (() => {
+                const required = [
+                    stats?.verificationRequirements?.email && "email",
+                    stats?.verificationRequirements?.mobile && "mobile",
+                ].filter(Boolean);
+                return required.length > 0
+                    ? `Required: ${required.join(" + ")}`
+                    : "No verification required";
+            })(),
         },
 
         {
@@ -70,6 +82,7 @@ export default function UserStats({
                     icon={card.icon}
                     label={card.label}
                     value={Number(card.value || 0).toLocaleString("en-IN")}
+                    hint={card.hint}
                     color={card.color}
                 />
 

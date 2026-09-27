@@ -30,6 +30,26 @@ const maintenanceMiddleware = async (
 
 
         // ==================================================
+        // PUBLIC SETTINGS BYPASS
+        // ==================================================
+        //
+        // The frontend reads system.maintenance_mode (and the
+        // site name/branding) from here to render the
+        // maintenance page - blocking it would leave the
+        // public site with nothing but generic errors.
+
+        if (
+            req.originalUrl.startsWith(
+                "/api/settings/public"
+            )
+        ) {
+
+            return next();
+
+        }
+
+
+        // ==================================================
         // GET MAINTENANCE MODE
         // ==================================================
 

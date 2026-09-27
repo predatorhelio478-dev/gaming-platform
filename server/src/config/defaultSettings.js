@@ -249,7 +249,7 @@ const defaultSettings = [
         key: "mobile_verification_required",
         value: false,
         type: "boolean",
-        description: "Require mobile verification (has no effect until an SMS provider is configured - see smsService.js)",
+        description: "Require mobile verification (enforced for withdrawals; the login gate waits for an SMS provider - see smsService.js)",
         isPublic: true,
     },
 
@@ -458,7 +458,10 @@ const defaultSettings = [
         key: "maintenance_mode",
         value: false,
         type: "boolean",
-        description: "Put the website into maintenance mode",
+        description: "Put the website into maintenance mode (admin panel stays available)",
+        // Public so the frontend can show the maintenance page
+        // instead of a wall of failed API calls.
+        isPublic: true,
     },
 
     {
@@ -466,8 +469,7 @@ const defaultSettings = [
         key: "debug_mode",
         value: false,
         type: "boolean",
-        description: "Enable system debug mode",
-        isSensitive: true,
+        description: "Enable verbose server-side request/error logging (never exposed to users)",
     },
 
 ];

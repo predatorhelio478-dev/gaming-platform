@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UserRound, Mail, Phone, ShieldCheck, KeyRound, Bell } from "lucide-react";
 
 import UserLayout from "../../components/user/UserLayout";
 import UserPageHeader from "../../components/user/UserPageHeader";
-import useAuth, { setAuthSession, getStoredToken } from "../../lib/useAuth";
+import useAuth, { setAuthSession, getStoredToken, getStoredUser } from "../../lib/useAuth";
 import { maskEmail, maskPhone } from "../../lib/mask";
 import {
+    getMyProfile,
     updateMyProfile,
     requestEmailChange,
     requestMobileChange,
@@ -51,9 +52,19 @@ export default function UserSettingsPage() {
     // PROFILE (name + notification prefs)
     // ==================================================
 
-    const [fullName, setFullName] = useState(user?.fullName || "");
-    const [notifyEmail, setNotifyEmail] = useState(user?.notificationPreferences?.email ?? true);
-    const [notifySms, setNotifySms] = useState(user?.notificationPreferences?.sms ?? true);
+    // Only what the user has edited is held in state - the
+    // displayed values otherwise come straight from `user`.
+    // Seeding useState from `user` instead froze the form at
+    // its first render, which on a full page load happens
+    // before the stored user is available (toggles stuck ON,
+    // name empty) - and saving then wrote those back.
+    const [profileDraft, setProfileDraft] = useState({});
+    const fullName = profileDraft.fullName ?? user?.fullName ?? "";
+    const notifyEmail = profileDraft.email ?? user?.notificationPreferences?.email ?? true;
+    const notifySms = profileDraft.sms ?? user?.notificationPreferences?.sms ?? true;
+    const setFullName = (value) => setProfileDraft((draft) => ({ ...draft, fullName: value }));
+    const setNotifyEmail = (value) => setProfileDraft((draft) => ({ ...draft, email: value }));
+    const setNotifySms = (value) => setProfileDraft((draft) => ({ ...draft, sms: value }));
     const [profileSaving, setProfileSaving] = useState(false);
     const [profileMessage, setProfileMessage] = useState("");
     const [profileError, setProfileError] = useState("");
@@ -70,6 +81,7 @@ export default function UserSettingsPage() {
                 notificationPreferences: { email: notifyEmail, sms: notifySms },
             });
             refreshUser(response.user);
+            setProfileDraft({});
             setProfileMessage("Profile updated.");
         } catch (err) {
             setProfileError(err.message || "Unable to update profile.");
@@ -77,6 +89,25 @@ export default function UserSettingsPage() {
             setProfileSaving(false);
         }
     };
+
+    // Refresh the stored profile from the server - the copy
+    // cached at login can be stale (e.g. preferences changed
+    // on another device).
+    useEffect(() => {
+
+        let active = true;
+
+        getMyProfile()
+            .then((response) => {
+                if (active && response?.user) {
+                    setAuthSession(getStoredToken(), { ...getStoredUser(), ...response.user });
+                }
+            })
+            .catch(() => {});
+
+        return () => { active = false; };
+
+    }, []);
 
     // ==================================================
     // VERIFY EXISTING EMAIL / MOBILE (separate from Change -

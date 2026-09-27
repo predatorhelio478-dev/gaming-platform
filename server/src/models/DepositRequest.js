@@ -94,6 +94,17 @@ const depositRequestSchema = new mongoose.Schema(
         // mode's credentials. Absent on rows created before
         // this field existed; callers fall back to the
         // currently active mode for those.
+        // Which wallet pool this deposit was credited to -
+        // "testBalance" only for Razorpay TEST-mode automatic
+        // payments, "balance" (real) for everything else.
+        // Refunds reverse exactly this pool. Absent on rows
+        // credited before this field existed (all real).
+        creditedTo: {
+            type: String,
+            enum: ["balance", "testBalance", null],
+            default: null,
+        },
+
         razorpayMode: {
             type: String,
             enum: ["test", "live", null],

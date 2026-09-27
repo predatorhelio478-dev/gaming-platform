@@ -71,6 +71,21 @@ const formatDate = (value) => {
 
 };
 
+// Mirrors withdrawalService's gate: each channel is required
+// only when its own setting is ON.
+const withdrawalVerificationText = (userSettings) => {
+
+    const required = [
+        userSettings.email_verification_required === true && "email",
+        userSettings.mobile_verification_required === true && "mobile number",
+    ].filter(Boolean);
+
+    return required.length > 0
+        ? `Your ${required.join(" and ")} must be verified before you can request a withdrawal.`
+        : "No account verification is currently required to request a withdrawal.";
+
+};
+
 const renderTextBlock = (text, fallback) => {
 
     const clean = String(text || "").trim();
@@ -266,7 +281,7 @@ export default function LegalHelpContent() {
                             <SettingFact label="Processing mode" value={payment.withdrawal_mode === "automatic" ? "Automatic (RazorpayX)" : "Manual review"} />
                         </div>
                         <p>
-                            Your email{user.mobile_verification_required ? " and mobile number" : ""} must be verified before you can request a withdrawal. Withdrawals are paid out via Bank Transfer or UPI, and are either processed automatically or reviewed by our team before payout, depending on current configuration.
+                            {withdrawalVerificationText(user)} Withdrawals are paid out via Bank Transfer or UPI, and are either processed automatically or reviewed by our team before payout, depending on current configuration.
                         </p>
                     </div>
                 ),
@@ -310,8 +325,8 @@ export default function LegalHelpContent() {
                 body: (
                     <div className="space-y-3 text-sm leading-6 text-slate-400">
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <SettingFact label="Email verification" value={user.email_verification_required === false ? "Optional" : "Required"} />
-                            <SettingFact label="Mobile verification" value={user.mobile_verification_required === false ? "Optional" : "Required"} />
+                            <SettingFact label="Email verification" value={user.email_verification_required === true ? "Required" : "Optional"} />
+                            <SettingFact label="Mobile verification" value={user.mobile_verification_required === true ? "Required" : "Optional"} />
                         </div>
                         <p>
                             {siteName} verifies your email address and mobile number using a one-time password (OTP) sent directly to you. We do not currently require additional document-based identity verification (KYC) to use the platform; this may change in the future if required by law or by our payment processing partners.

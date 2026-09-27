@@ -56,6 +56,20 @@ const adminSchema = new mongoose.Schema(
             default: "admin",
         },
 
+        // Permanent delete: the document is kept (audit logs keep
+        // resolving actorId) but anonymized, locked out and
+        // hidden from every list - see
+        // adminManagementService.deleteAdmin.
+        isDeleted: {
+            type: Boolean,
+            default: false,
+        },
+
+        deletedAt: {
+            type: Date,
+            default: null,
+        },
+
         isActive: {
             type: Boolean,
             default: true,

@@ -691,7 +691,7 @@ export default function UserCreateModal({
                                     Email/mobile verification
                                 </p>
 
-                                <p className="mt-0.5 text-[10px] leading-4 text-slate-600">
+                                <p className="mt-0.5 text-[11px] leading-4 text-slate-400">
                                     Verification can only happen via a real OTP sent to the user - it can&apos;t be set from here. The account is created unverified.
                                 </p>
 

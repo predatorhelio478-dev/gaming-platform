@@ -130,7 +130,10 @@ const handleRazorpayWebhook = async (req, res) => {
                         .confirmRazorpayPaymentTrusted(
                             payment.order_id,
                             payment.id,
-                            "webhook"
+                            "webhook",
+                            // Only an event signed with the order's
+                            // OWN mode secret may confirm it.
+                            matchedSecret.mode
                         )
                         .catch((error) => {
 
@@ -158,7 +161,8 @@ const handleRazorpayWebhook = async (req, res) => {
                         .markRazorpayPaymentFailed(
                             payment.order_id,
                             payment?.error_description ||
-                            "Payment failed"
+                            "Payment failed",
+                            matchedSecret.mode
                         )
                         .catch(() => {});
 
@@ -179,7 +183,8 @@ const handleRazorpayWebhook = async (req, res) => {
                     await depositService
                         .handleRefundWebhook(
                             refund.id,
-                            eventType === "refund.processed" ? "processed" : "failed"
+                            eventType === "refund.processed" ? "processed" : "failed",
+                            matchedSecret.mode
                         )
                         .catch((error) => {
 

@@ -110,6 +110,18 @@ export const handleSessionExpiry = () => {
 
 
 // ======================================================
+// MAINTENANCE MODE SIGNAL
+// ======================================================
+//
+// Fired when the backend answers 503 MAINTENANCE_MODE, so
+// MaintenanceGate can swap in the maintenance page even if
+// maintenance was switched on after this page loaded.
+
+export const MAINTENANCE_EVENT =
+    "app:maintenance-mode";
+
+
+// ======================================================
 // COMMON API REQUEST
 // ======================================================
 
@@ -199,6 +211,19 @@ const apiRequest = async (
             handleSessionExpiry();
 
         }
+
+    }
+
+
+    if (
+        response.status === 503 &&
+        data?.code === "MAINTENANCE_MODE" &&
+        typeof window !== "undefined"
+    ) {
+
+        window.dispatchEvent(
+            new Event(MAINTENANCE_EVENT)
+        );
 
     }
 
@@ -737,6 +762,19 @@ export const verifyAndLogin =
 // ======================================================
 // PROFILE / ACCOUNT SETTINGS
 // ======================================================
+
+export const getMyProfile =
+    async () => {
+
+        return await apiRequest(
+            "/users/me",
+            {
+                method: "GET",
+            }
+        );
+
+    };
+
 
 export const updateMyProfile =
     async (

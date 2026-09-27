@@ -4,6 +4,12 @@ const adminUserService =
 const { createAuditLog } =
     require("../services/auditLogService");
 
+const {
+    parseBulkIds,
+    runBulk,
+    sendBulkResult,
+} = require("../utils/bulkIds");
+
 const notificationService =
     require("../services/notificationService");
 
@@ -625,7 +631,7 @@ const deactivateUser = async (
         }
 
         const result =
-            await adminUserService.deactivateUser(id);
+            await adminUserService.deactivateUser(id, req.admin);
 
         if (!result.alreadyDeactivated) {
 
@@ -675,7 +681,7 @@ const deactivateUser = async (
             error.message ||
             "Unable to deactivate user.";
 
-        let statusCode = 400;
+        let statusCode = error.statusCode || 400;
 
         if (message === "User not found.") {
 
@@ -703,6 +709,94 @@ const deactivateUser = async (
 // audit/support record keeps resolving to the same user _id.
 // ======================================================
 
+// ======================================================
+// BULK PERMANENTLY DELETE USERS
+// ======================================================
+//
+// DELETE /api/admin/users/bulk   body: { ids: [...] }
+//
+// Every id goes through the exact same adminUserService.
+// deleteUser as the single Delete action (role:"admin"
+// accounts refused, the acting admin's own account refused,
+// already-deleted = no-op), one at a time, so permissions and
+// atomicity can't drift from the single-delete path. Partial
+// failures are reported per id and never undo the successes.
+// ======================================================
+
+const bulkDeleteUsers = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const { ids, invalid } =
+            parseBulkIds(req.body?.ids);
+
+        const result =
+            await runBulk(ids, async (id) => {
+
+                const outcome =
+                    await adminUserService.deleteUser(id, req.admin);
+
+                if (outcome.alreadyDeleted) {
+
+                    throw new Error("User is already deleted.");
+
+                }
+
+                await createAuditLog({
+                    actorType: "admin",
+                    actorId: req.admin?._id || null,
+                    action: "user.permanently_deleted",
+                    module: "users",
+                    key: id,
+                    metadata: {
+                        targetUserId: id,
+                        actorAdminId: String(req.admin?._id || ""),
+                        bulk: true,
+                    },
+                    ...getRequestContext(req),
+                }).catch(() => {});
+
+                return {};
+
+            });
+
+        result.failed.unshift(...invalid);
+
+        if (result.deleted.length > 0) {
+
+            notificationService
+                .notifyAdmins(
+                    "admin_action",
+                    "Users permanently deleted",
+                    `${result.deleted.length} user account(s) were permanently deleted by an admin.`,
+                    { userIds: result.deleted.map((d) => d.id), adminId: String(req.admin?._id || "") }
+                )
+                .catch(() => {});
+
+        }
+
+        return sendBulkResult(res, result, "user");
+
+    } catch (error) {
+
+        console.error(
+            "Admin Bulk Delete Users Error:",
+            error
+        );
+
+        return res.status(error.statusCode || 400).json({
+            success: false,
+            message: error.message || "Unable to delete the selected users.",
+        });
+
+    }
+
+};
+
+
 const deleteUser = async (
     req,
     res
@@ -722,7 +816,7 @@ const deleteUser = async (
         }
 
         const result =
-            await adminUserService.deleteUser(id);
+            await adminUserService.deleteUser(id, req.admin);
 
         if (!result.alreadyDeleted) {
 
@@ -776,7 +870,7 @@ const deleteUser = async (
             error.message ||
             "Unable to delete user.";
 
-        let statusCode = 400;
+        let statusCode = error.statusCode || 400;
 
         if (message === "User not found.") {
 
@@ -1313,6 +1407,8 @@ const manuallyVerifyMobile = async (req, res) => {
 module.exports = {
 
     getUsers,
+
+    bulkDeleteUsers,
 
     getUserById,
 

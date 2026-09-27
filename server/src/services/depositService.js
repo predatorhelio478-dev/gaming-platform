@@ -108,6 +108,89 @@ const validateDepositAmount = async (amount) => {
 
 
 // ==========================================================
+// WHICH BALANCE A DEPOSIT CREDITS
+// ==========================================================
+//
+//   Razorpay mode | Payment mode | Credited to
+//   --------------+--------------+------------------------------
+//   TEST          | Automatic    | testBalance (verified payment)
+//   TEST          | Manual       | balance, after admin approval
+//   LIVE          | Automatic    | balance (verified payment)
+//   LIVE          | Manual       | balance, after admin approval
+//
+// Only a Razorpay-collected payment made under TEST
+// credentials is play money. A manual deposit is a real
+// payment reviewed by an admin, whatever the Razorpay mode.
+// The Razorpay mode is the one pinned on the order when it
+// was created - never the currently active setting. Legacy
+// orders without a pinned mode keep the old behaviour (real).
+// ==========================================================
+
+const getDepositCreditPool = (request) => {
+
+    return request.initiatedVia === "razorpay" &&
+        request.razorpayMode === "test"
+        ? "testBalance"
+        : "balance";
+
+};
+
+// Credits the deposit to its pool inside the caller's session.
+const creditDepositToWallet = async (request, remark, session) => {
+
+    const pool =
+        getDepositCreditPool(request);
+
+    const walletResult =
+        pool === "testBalance"
+            ? await walletService.creditPool(
+                request.user,
+                request.amount,
+                "deposit",
+                remark,
+                "testBalance",
+                { session }
+            )
+            : await walletService.credit(
+                request.user,
+                request.amount,
+                "deposit",
+                remark,
+                { session }
+            );
+
+    return {
+        pool,
+        transactionId: walletResult.transactionId,
+    };
+
+};
+
+const describePool = (pool) =>
+    pool === "testBalance" ? "Test Balance" : "wallet";
+
+// A webhook is trusted only for orders of the mode whose secret
+// signed it: an event signed with the TEST secret must never
+// confirm (credit), fail or refund a LIVE order, or vice versa.
+// Legacy rows with no pinned mode are accepted as before.
+const assertWebhookModeMatches = (request, verifiedMode) => {
+
+    if (
+        verifiedMode &&
+        request?.razorpayMode &&
+        request.razorpayMode !== verifiedMode
+    ) {
+
+        throw new Error(
+            `Webhook signed with the ${verifiedMode.toUpperCase()} secret cannot act on a ${request.razorpayMode.toUpperCase()} order.`
+        );
+
+    }
+
+};
+
+
+// ==========================================================
 // CREATE DEPOSIT REQUEST (MANUAL)
 // ==========================================================
 
@@ -117,6 +200,24 @@ const createDepositRequest = async (
     referenceId,
     method = "other"
 ) => {
+
+    // Mirrors createRazorpayOrder's guard: the admin's
+    // payment_mode decides the flow server-side, not just
+    // which form the frontend happens to show.
+    const paymentMode =
+        await settingsService.getValue(
+            "payment",
+            "payment_mode",
+            "manual"
+        );
+
+    if (paymentMode !== "manual") {
+
+        throw new Error(
+            "Manual deposits are currently disabled. Please use the online payment option."
+        );
+
+    }
 
     const numericAmount =
         await validateDepositAmount(amount);
@@ -331,33 +432,107 @@ const approveDepositRequest = async (
 
     }
 
-    const walletResult =
-        await walletService.credit(
-            request.user,
-            request.amount,
-            "deposit",
-            `Deposit approved - Ref ${request.referenceId}`
+    // A Razorpay order is credited only once Razorpay itself
+    // confirms the payment (signature-verified checkout,
+    // signed webhook, or Reconcile against Razorpay's API) -
+    // never by an admin approving an order that may be unpaid.
+    if (request.initiatedVia === "razorpay") {
+
+        throw new Error(
+            "Razorpay deposits are credited only after the gateway confirms payment. Use Reconcile to check its status with Razorpay."
         );
 
-    request.status = "approved";
-    request.reviewedBy = adminId;
-    request.reviewNotes = reviewNotes;
-    request.reviewedAt = new Date();
-    request.transactionId = walletResult.transactionId;
+    }
 
-    await request.save();
+    // Claim + credit in one transaction: a double-click or two
+    // admins approving at once can never credit twice, and a
+    // failed credit leaves the request pending.
+    const session =
+        await mongoose.startSession();
+
+    let approved;
+
+    try {
+
+        session.startTransaction();
+
+        approved =
+            await DepositRequest.findOneAndUpdate(
+                {
+                    _id: request._id,
+                    status: "pending",
+                    initiatedVia: { $ne: "razorpay" },
+                },
+                {
+                    $set: {
+                        status: "approved",
+                        reviewedBy: adminId,
+                        reviewNotes,
+                        reviewedAt: new Date(),
+                    },
+                },
+                { session, new: true }
+            );
+
+        if (!approved) {
+
+            throw new Error(
+                "Deposit request has already been processed."
+            );
+
+        }
+
+        // Manual deposits are always REAL money, whatever the
+        // Razorpay mode (see getDepositCreditPool).
+        const { pool, transactionId } =
+            await creditDepositToWallet(
+                approved,
+                `Deposit approved - Ref ${approved.referenceId}`,
+                session
+            );
+
+        approved.transactionId = transactionId;
+        approved.creditedTo = pool;
+
+        await approved.save({ session });
+
+        await session.commitTransaction();
+
+    } catch (error) {
+
+        if (session.inTransaction()) {
+
+            await session.abortTransaction();
+
+        }
+
+        if (error?.errorLabels?.includes("TransientTransactionError")) {
+
+            throw new Error(
+                "Deposit request has already been processed."
+            );
+
+        }
+
+        throw error;
+
+    } finally {
+
+        await session.endSession();
+
+    }
 
     notificationService
         .notify(
-            request.user,
+            approved.user,
             "deposit",
             "Deposit approved",
-            `Your deposit of ₹${request.amount} has been approved and credited to your wallet.`,
-            { depositRequestId: String(request._id) }
+            `Your deposit of ₹${approved.amount} has been approved and credited to your wallet.`,
+            { depositRequestId: String(approved._id) }
         )
         .catch(() => {});
 
-    return request;
+    return approved;
 
 };
 
@@ -391,24 +566,44 @@ const rejectDepositRequest = async (
 
     }
 
-    request.status = "rejected";
-    request.reviewedBy = adminId;
-    request.reviewNotes = reviewNotes;
-    request.reviewedAt = new Date();
+    // Conditional update so a reject racing an approve can
+    // never overwrite an already-credited request.
+    const rejected =
+        await DepositRequest.findOneAndUpdate(
+            {
+                _id: request._id,
+                status: "pending",
+            },
+            {
+                $set: {
+                    status: "rejected",
+                    reviewedBy: adminId,
+                    reviewNotes,
+                    reviewedAt: new Date(),
+                },
+            },
+            { new: true }
+        );
 
-    await request.save();
+    if (!rejected) {
+
+        throw new Error(
+            "Deposit request has already been processed."
+        );
+
+    }
 
     notificationService
         .notify(
-            request.user,
+            rejected.user,
             "deposit",
             "Deposit rejected",
-            `Your deposit request of ₹${request.amount} was rejected.${reviewNotes ? ` Reason: ${reviewNotes}` : ""}`,
-            { depositRequestId: String(request._id) }
+            `Your deposit request of ₹${rejected.amount} was rejected.${reviewNotes ? ` Reason: ${reviewNotes}` : ""}`,
+            { depositRequestId: String(rejected._id) }
         )
         .catch(() => {});
 
-    return request;
+    return rejected;
 
 };
 
@@ -513,6 +708,9 @@ const createRazorpayOrder = async (
             amount: numericAmount,
             currency: RAZORPAY_CURRENCY,
             keyId: await getRazorpayKeyId(mode),
+            // Lets the checkout page say where a verified
+            // payment will land (TEST -> Test Balance).
+            creditsTo: getDepositCreditPool(depositRequest),
         };
 
     } catch (error) {
@@ -614,17 +812,18 @@ const creditDepositOnce = async (
 
         }
 
-        const walletResult =
-            await walletService.credit(
-                request.user,
-                request.amount,
-                "deposit",
-                `Razorpay deposit - Payment ${razorpayPaymentId}`,
-                { session }
+        // TEST-mode order -> testBalance, LIVE -> real balance
+        // (pinned mode, see getDepositCreditPool).
+        const { pool, transactionId } =
+            await creditDepositToWallet(
+                request,
+                `Razorpay ${request.razorpayMode === "test" ? "TEST " : ""}deposit - Payment ${razorpayPaymentId}`,
+                session
             );
 
         request.status = "approved";
-        request.transactionId = walletResult.transactionId;
+        request.transactionId = transactionId;
+        request.creditedTo = pool;
         request.reviewedAt = new Date();
 
         await request.save({ session });
@@ -641,6 +840,8 @@ const creditDepositOnce = async (
                 userId: String(request.user),
                 razorpayOrderId,
                 razorpayPaymentId,
+                razorpayMode: request.razorpayMode,
+                creditedTo: request.creditedTo,
                 source,
             },
         }).catch(() => {});
@@ -650,7 +851,7 @@ const creditDepositOnce = async (
                 request.user,
                 "deposit",
                 "Deposit successful",
-                `Your deposit of ₹${request.amount} was successful and has been credited to your wallet.`,
+                `Your deposit of ₹${request.amount} was successful and has been credited to your ${describePool(request.creditedTo)}.`,
                 { depositRequestId: String(request._id) }
             )
             .catch(() => {});
@@ -775,13 +976,23 @@ const confirmRazorpayPayment = async (
 const confirmRazorpayPaymentTrusted = async (
     razorpayOrderId,
     razorpayPaymentId,
-    source
+    source,
+    verifiedMode = null
 ) => {
 
     if (!(await isRazorpayConfigured())) {
 
         throw new Error(
             "Payment gateway is not configured."
+        );
+
+    }
+
+    if (verifiedMode) {
+
+        assertWebhookModeMatches(
+            await DepositRequest.findOne({ razorpayOrderId }).select("razorpayMode"),
+            verifiedMode
         );
 
     }
@@ -801,8 +1012,18 @@ const confirmRazorpayPaymentTrusted = async (
 
 const markRazorpayPaymentFailed = async (
     razorpayOrderId,
-    reason = ""
+    reason = "",
+    verifiedMode = null
 ) => {
+
+    if (verifiedMode) {
+
+        assertWebhookModeMatches(
+            await DepositRequest.findOne({ razorpayOrderId }).select("razorpayMode"),
+            verifiedMode
+        );
+
+    }
 
     const request =
         await DepositRequest.findOneAndUpdate(
@@ -1131,8 +1352,13 @@ const finalizeDepositRefund = async (
 
         }
 
+        // Reverse exactly the pool this deposit was credited to
+        // (a TEST-mode deposit never touches real balance).
+        const pool =
+            request.creditedTo || "balance";
+
         const availableBalance =
-            Number(wallet.balance || 0);
+            Number(wallet[pool] || 0);
 
         const debitAmount =
             Math.min(availableBalance, Number(request.amount));
@@ -1142,13 +1368,31 @@ const finalizeDepositRefund = async (
 
         if (debitAmount > 0) {
 
-            await walletService.debit(
-                request.user,
-                debitAmount,
-                "refund",
-                `Deposit refunded via Razorpay - ${reason}`,
-                { session }
-            );
+            const remark =
+                `Deposit refunded via Razorpay - ${reason}`;
+
+            if (pool === "testBalance") {
+
+                await walletService.debitPool(
+                    request.user,
+                    debitAmount,
+                    "refund",
+                    remark,
+                    "testBalance",
+                    { session }
+                );
+
+            } else {
+
+                await walletService.debit(
+                    request.user,
+                    debitAmount,
+                    "refund",
+                    remark,
+                    { session }
+                );
+
+            }
 
         }
 
@@ -1218,11 +1462,14 @@ const finalizeDepositRefund = async (
 
 const handleRefundWebhook = async (
     razorpayRefundId,
-    status
+    status,
+    verifiedMode = null
 ) => {
 
     const request =
         await DepositRequest.findOne({ razorpayRefundId });
+
+    assertWebhookModeMatches(request, verifiedMode);
 
     if (!request) {
 

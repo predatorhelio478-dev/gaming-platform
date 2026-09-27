@@ -17,6 +17,7 @@ const adminWalletRoutes = require("./routes/adminWalletRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
 const publicSettingsRoutes = require("./routes/publicSettingsRoutes");
 const maintenanceMiddleware = require("./middleware/maintenanceMiddleware");
+const debugLogger = require("./middleware/debugLogger");
 const auditLogRoutes = require("./routes/auditLogRoutes");
 const walletRequestRoutes = require("./routes/walletRequestRoutes");
 const adminWalletRequestRoutes = require("./routes/adminWalletRequestRoutes");
@@ -69,6 +70,10 @@ app.use(cors({
     },
     credentials: true
 }));
+
+// Registered first so debug mode logs every API request,
+// webhooks included.
+app.use(debugLogger);
 
 /*
  * Razorpay webhook signature verification needs the exact

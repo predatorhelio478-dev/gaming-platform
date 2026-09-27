@@ -652,7 +652,7 @@ export default function AdminCreateModal({
                                     Every action is audited
                                 </p>
 
-                                <p className="mt-0.5 text-[10px] leading-4 text-slate-600">
+                                <p className="mt-0.5 text-[11px] leading-4 text-slate-400">
                                     Creating an admin account records who created it, when, and with what role in the audit log.
                                 </p>
 

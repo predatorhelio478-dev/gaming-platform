@@ -1,5 +1,7 @@
 "use client";
 
+import BulkDeleteModal from "../../../components/admin/ui/BulkDeleteModal";
+import BulkDeleteFeedback from "../../../components/admin/ui/BulkDeleteFeedback";
 import {
     useCallback,
     useEffect,
@@ -42,6 +44,8 @@ import {
     createAdminAccount,
     updateAdminAccount,
     deactivateAdminAccount,
+    deleteAdminAccount,
+    bulkDeleteAdminAccounts,
     changeAdminPassword,
     getCurrentAdmin,
 } from "../../../lib/adminApi";
@@ -109,6 +113,22 @@ export default function AdminsPage() {
     const [deactivateModalOpen, setDeactivateModalOpen] =
         useState(false);
 
+    const [deleteTarget, setDeleteTarget] =
+        useState(null);
+
+    // Bulk delete: selected row ids, confirm modal, result banner.
+    const [selectedIds, setSelectedIds] =
+        useState([]);
+
+    const [bulkModalOpen, setBulkModalOpen] =
+        useState(false);
+
+    const [bulkDeleting, setBulkDeleting] =
+        useState(false);
+
+    const [bulkFeedback, setBulkFeedback] =
+        useState(null);
+
     const [deactivateTarget, setDeactivateTarget] =
         useState(null);
 
@@ -149,8 +169,10 @@ export default function AdminsPage() {
     const [search, setSearch] =
         useState("");
 
+    // Active admins only by default - deactivated accounts are
+    // shown only when that filter is picked explicitly.
     const [status, setStatus] =
-        useState("all");
+        useState("active");
 
     const [role, setRole] =
         useState("all");
@@ -393,7 +415,7 @@ export default function AdminsPage() {
     const handleResetFilters =
         () => {
             setSearch("");
-            setStatus("all");
+            setStatus("active");
             setRole("all");
         };
 
@@ -496,6 +518,107 @@ export default function AdminsPage() {
             } catch (requestError) {
 
                 setError(requestError?.message || "Unable to deactivate admin.");
+
+            } finally {
+
+                setActionLoading(false);
+
+            }
+
+        };
+
+
+    // ==================================================
+    // BULK DELETE
+    // ==================================================
+    //
+    // Only ids still visible on this page are sent (a stale
+    // selection from another page/filter is ignored); the
+    // server re-validates each one.
+
+    const selectedOnPage =
+        selectedIds.filter((id) =>
+            admins.some((row) => String(row?._id) === String(id))
+        );
+
+    const handleConfirmBulkDelete =
+        async () => {
+
+            const ids = [...selectedOnPage];
+
+            if (ids.length === 0) return;
+
+            const labelFor = (id) => {
+                const row = admins.find((item) => String(item?._id) === String(id));
+                return row ? `@${row.username}` : id;
+            };
+
+            const toFeedback = (data) => ({
+                message: data?.message || "Bulk delete finished.",
+                deletedCount: data?.deleted?.length || 0,
+                failed: (data?.failed || []).map((item) => ({
+                    label: labelFor(item.id),
+                    reason: item.reason,
+                })),
+            });
+
+            setBulkDeleting(true);
+
+            try {
+
+                setBulkFeedback(toFeedback(await bulkDeleteAdminAccounts(ids)));
+
+            } catch (requestError) {
+
+                setBulkFeedback(
+                    requestError?.data?.failed
+                        ? toFeedback(requestError.data)
+                        : {
+                            message: requestError?.message || "Unable to delete the selected admins.",
+                            deletedCount: 0,
+                            failed: [],
+                        }
+                );
+
+            } finally {
+
+                setBulkDeleting(false);
+                setBulkModalOpen(false);
+                setSelectedIds([]);
+
+            }
+
+            // Deleted accounts drop out of the default list right away.
+            await fetchAdmins({ page: pagination.page || 1, showRefreshing: true });
+
+        };
+
+    // Permanent delete - reuses the type-to-confirm modal in
+    // "delete" mode.
+    const handleOpenDelete =
+        (admin) => {
+            setDeleteTarget(admin);
+        };
+
+    const handleConfirmDelete =
+        async (admin) => {
+
+            if (!admin?._id) return;
+
+            setActionLoading(true);
+            setError("");
+
+            try {
+
+                await deleteAdminAccount(admin._id);
+
+                setDeleteTarget(null);
+
+                await fetchAdmins({ page: pagination.page || 1, showRefreshing: true });
+
+            } catch (requestError) {
+
+                setError(requestError?.message || "Unable to delete admin.");
 
             } finally {
 
@@ -721,6 +844,11 @@ export default function AdminsPage() {
                     ERROR
                 ===================================================== */}
 
+                <BulkDeleteFeedback
+                    feedback={bulkFeedback}
+                    onDismiss={() => setBulkFeedback(null)}
+                />
+
                 {error && (
 
                     <div className="mb-6 flex flex-col gap-3 rounded-xl border border-red-500/20 bg-red-500/[0.04] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -789,11 +917,23 @@ export default function AdminsPage() {
                     pagination={pagination}
                     refreshing={refreshing}
                     formatDate={formatDate}
-                    currentAdminId={me?._id}
+                    // /admin/auth/me returns the id as `id` (not
+                    // `_id`) - reading only `_id` left this
+                    // undefined, so the own row was never
+                    // recognised.
+                    currentAdminId={me?.id || me?._id}
                     currentAdminRole={me?.role}
                     onEdit={handleOpenEdit}
                     onReactivate={handleReactivate}
                     onDeactivate={handleOpenDeactivate}
+                    onDelete={handleOpenDelete}
+                    bulkEnabled={
+                        me?.role === "super_admin" ||
+                        me?.role === "admin"
+                    }
+                    selectedIds={selectedOnPage}
+                    onSelectionChange={setSelectedIds}
+                    onBulkDelete={() => setBulkModalOpen(true)}
                     onChangePassword={handleOpenChangePassword}
                     actionLoading={actionLoading}
                     onPageChange={handlePageChange}
@@ -838,6 +978,25 @@ export default function AdminsPage() {
                 admin={deactivateTarget}
                 onClose={() => { setDeactivateModalOpen(false); setDeactivateTarget(null); }}
                 onConfirm={handleConfirmDeactivate}
+                actionLoading={actionLoading}
+            />
+
+            <BulkDeleteModal
+                open={bulkModalOpen}
+                count={selectedOnPage.length}
+                noun="admin"
+                description="Their logins are removed and their personal details erased. Audit log entries they created are kept."
+                actionLoading={bulkDeleting}
+                onClose={() => setBulkModalOpen(false)}
+                onConfirm={handleConfirmBulkDelete}
+            />
+
+            <DeactivateAdminModal
+                mode="delete"
+                open={Boolean(deleteTarget)}
+                admin={deleteTarget}
+                onClose={() => setDeleteTarget(null)}
+                onConfirm={handleConfirmDelete}
                 actionLoading={actionLoading}
             />
 

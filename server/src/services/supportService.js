@@ -783,7 +783,10 @@ const changeTicketStatus = async (
                 "support",
                 status === "resolved" ? "Ticket resolved" : "Ticket closed",
                 `Your ticket "${ticket.subject}" (${ticket.ticketNumber}) has been ${status}.`,
-                { ticketId: String(ticket._id) }
+                { ticketId: String(ticket._id) },
+                // "closed" sends the templated email below instead
+                // of the generic one - never both.
+                { skipEmail: status === "closed" }
             )
             .catch(() => {});
 
@@ -801,10 +804,12 @@ const changeTicketStatus = async (
 
                 const ticketUser =
                     await User.findById(ticket.user).select(
-                        "email fullName username"
+                        "email fullName username notificationPreferences"
                     );
 
-                if (!ticketUser?.email) {
+                // Respects the global email switch and this
+                // user's own Email Notifications preference.
+                if (!(await notificationService.canEmailUser(ticketUser))) {
 
                     return;
 

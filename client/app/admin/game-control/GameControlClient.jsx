@@ -53,6 +53,11 @@ export default function GameControlPage() {
     const [loading, setLoading] =
         useState(false);
 
+    // True while Maintenance Mode holds the game (engine's
+    // `maintenance` flag) - the timer is frozen until it's off.
+    const [maintenanceHold, setMaintenanceHold] =
+        useState(false);
+
     /*
     |--------------------------------------------------------------------------
     | LOAD ADMIN
@@ -166,6 +171,12 @@ export default function GameControlPage() {
 
             if (data.round) {
                 setRound(data.round);
+            }
+
+            // Timer-only events omit the flag - only full state
+            // snapshots update it.
+            if (typeof data.maintenance === "boolean") {
+                setMaintenanceHold(data.maintenance);
             }
 
             /*
@@ -528,6 +539,13 @@ export default function GameControlPage() {
                     title="Game Control"
                     description="Control and monitor the live game engine."
                 />
+
+                {maintenanceHold && (
+                    <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                        Maintenance Mode is on - betting is closed and the round timer is frozen. No result will be decided until
+                        Maintenance Mode is turned off in Settings &rarr; System; the current round then continues where it left off.
+                    </div>
+                )}
 
                 {/* GAME OVERVIEW */}
 

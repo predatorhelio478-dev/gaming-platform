@@ -2131,6 +2131,20 @@ export const adminResetPassword = async (payload) => {
 // PERMANENTLY DELETE USER (admin/super_admin only)
 // ==========================================
 
+// Bulk permanent delete - ONE request; see
+// bulkDeleteAdminAccounts for the response shape.
+export const bulkDeleteAdminUsers = async (ids) => {
+
+    return await adminRequest(
+        "/admin/users/bulk",
+        {
+            method: "DELETE",
+            body: JSON.stringify({ ids }),
+        }
+    );
+
+};
+
 export const deleteAdminUser = async (userId) => {
 
     return await adminRequest(
@@ -2269,6 +2283,22 @@ export const updateAdminAccount = async (id, payload) => {
 
 export const deactivateAdminAccount = async (id) => {
     return await adminRequest(`/admin/admins/${id}`, { method: "DELETE" });
+};
+
+// Permanent (anonymizing) delete - self-delete and the
+// super_admin hierarchy are enforced server-side.
+// Bulk permanent delete - ONE request; the server applies the
+// single-delete rules to every id and reports per-id results
+// ({ deleted, failed }), including on a 400 (error.data).
+export const bulkDeleteAdminAccounts = async (ids) => {
+    return await adminRequest("/admin/admins/bulk", {
+        method: "DELETE",
+        body: JSON.stringify({ ids }),
+    });
+};
+
+export const deleteAdminAccount = async (id) => {
+    return await adminRequest(`/admin/admins/${id}/permanent`, { method: "DELETE" });
 };
 
 // Super Admin only - enforced server-side regardless of who calls this.

@@ -217,13 +217,21 @@ export default function DepositPage() {
 
                     try {
 
-                        await verifyRazorpayPayment({
+                        // Credited only after the server verifies the
+                        // payment signature - the message comes from
+                        // that verified result (Test Balance in
+                        // Razorpay TEST mode, real balance in LIVE).
+                        const verified = await verifyRazorpayPayment({
                             razorpay_order_id: response.razorpay_order_id,
                             razorpay_payment_id: response.razorpay_payment_id,
                             razorpay_signature: response.razorpay_signature,
                         });
 
-                        setFormMessage("Payment successful! Your wallet has been credited.");
+                        setFormMessage(
+                            verified?.data?.creditedTo === "testBalance"
+                                ? "Test payment successful! Your Test Balance has been credited."
+                                : "Payment successful! Your wallet has been credited."
+                        );
                         setAmount("");
 
                         setPage(1);
@@ -279,7 +287,7 @@ export default function DepositPage() {
                     title="Deposit"
                     description={
                         paymentMode === "automatic"
-                            ? "Pay instantly and your real balance is credited automatically."
+                            ? "Pay instantly - your balance is credited automatically once the payment is verified."
                             : "Submit your payment reference - an admin will review and credit your real balance."
                     }
                 />

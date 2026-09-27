@@ -133,6 +133,9 @@ const registerGameSocket = (
                     emergencyStopped:
                         gameStatus.emergencyStopped,
 
+                    maintenance:
+                        gameStatus.maintenance,
+
                     round:
                         gameStatus.round,
 

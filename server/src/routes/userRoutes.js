@@ -12,6 +12,7 @@ const {
 } = require("../validators/requestValidators");
 
 const {
+    getMyProfile,
     updateMyProfile,
     requestEmailChange,
     requestMobileChange,
@@ -20,6 +21,7 @@ const {
 
 router.use(auth);
 
+router.get("/me", getMyProfile);
 router.patch("/me", updateProfileValidators, updateMyProfile);
 router.post("/me/email/change", emailChangeValidators, requestEmailChange);
 router.post("/me/mobile/change", mobileChangeValidators, requestMobileChange);

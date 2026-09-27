@@ -9,6 +9,7 @@ import {
     AlertTriangle,
     ShieldAlert,
     ShieldX,
+    Trash2,
     X,
 } from "lucide-react";
 
@@ -25,7 +26,28 @@ import {
 // the Reactivate action.
 // ======================================================
 
-const CONFIRM_WORD = "DEACTIVATE";
+// mode "deactivate" (reversible) or "delete" (permanent) -
+// same type-to-confirm layout, different wording.
+const MODE_TEXT = {
+    deactivate: {
+        confirmWord: "DEACTIVATE",
+        title: "Deactivate Admin Account",
+        subtitle: "They will lose access immediately",
+        heading: "You are about to deactivate this admin account.",
+        body: "They will no longer be able to log into the admin panel. This can be reversed later from this same screen (Reactivate).",
+        busy: "Deactivating...",
+        action: "Deactivate Admin",
+    },
+    delete: {
+        confirmWord: "DELETE",
+        title: "Delete Admin Account",
+        subtitle: "This cannot be undone",
+        heading: "You are about to permanently delete this admin account.",
+        body: "Their login is removed and their name, username, email and mobile are erased. The account disappears from the admin list and cannot be reactivated. Audit log entries they created are kept.",
+        busy: "Deleting...",
+        action: "Delete Admin",
+    },
+};
 
 export default function DeactivateAdminModal({
     open = false,
@@ -33,7 +55,14 @@ export default function DeactivateAdminModal({
     actionLoading = false,
     onClose,
     onConfirm,
+    mode = "deactivate",
 }) {
+
+    const text =
+        MODE_TEXT[mode] || MODE_TEXT.deactivate;
+
+    const CONFIRM_WORD =
+        text.confirmWord;
 
     const [typedValue, setTypedValue] =
         useState("");
@@ -161,12 +190,12 @@ export default function DeactivateAdminModal({
                                 id="deactivate-admin-modal-title"
                                 className="text-sm font-black text-red-100"
                             >
-                                Deactivate Admin Account
+                                {text.title}
                             </h2>
 
 
                             <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-400/80">
-                                They will lose access immediately
+                                {text.subtitle}
                             </p>
 
                         </div>
@@ -228,11 +257,11 @@ export default function DeactivateAdminModal({
                             <div>
 
                                 <p className="text-xs font-bold text-red-200">
-                                    You are about to deactivate this admin account.
+                                    {text.heading}
                                 </p>
 
                                 <p className="mt-1.5 text-[11px] leading-5 text-red-300/80">
-                                    They will no longer be able to log into the admin panel. This can be reversed later from this same screen (Reactivate).
+                                    {text.body}
                                 </p>
 
                             </div>
@@ -408,15 +437,15 @@ export default function DeactivateAdminModal({
 
                                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
 
-                                Deactivating...
+                                {text.busy}
 
                             </span>
 
                         ) : (
 
                             <>
-                                <ShieldX size={14} />
-                                Deactivate Admin
+                                {mode === "delete" ? <Trash2 size={14} /> : <ShieldX size={14} />}
+                                {text.action}
                             </>
 
                         )}

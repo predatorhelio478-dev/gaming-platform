@@ -160,6 +160,16 @@ router.post(
 //
 // ======================================================
 
+// BULK permanent delete - registered BEFORE "/:id" so "bulk"
+// is never read as a user id. Same role gate as the single
+// Delete; every id is re-checked in adminUserService.deleteUser.
+router.delete(
+    "/bulk",
+    adminAuth,
+    requireAdminRole("super_admin", "admin"),
+    adminUserController.bulkDeleteUsers
+);
+
 router.delete(
     "/:id",
     adminAuth,

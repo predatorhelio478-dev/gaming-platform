@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cache } from "react";
 import "./globals.css";
 
 import CookieConsent from "../components/common/CookieConsent";
 import ResponsibleGamingPopup from "../components/common/ResponsibleGamingPopup";
+import MaintenanceGate from "../components/common/MaintenanceGate";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,6 +19,23 @@ const geistMono = Geist_Mono({
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+// One /settings/public fetch per request, shared by
+// generateMetadata and RootLayout (React's cache() dedupes it).
+// Returns null when the backend is unreachable.
+const getPublicSettings = cache(async () => {
+  try {
+    const response = await fetch(`${API_URL}/settings/public`, {
+      cache: "no-store",
+    });
+
+    const data = await response.json();
+
+    return data?.data || null;
+  } catch {
+    return null;
+  }
+});
 
 // ==========================================================
 // SITE-WIDE TITLE TEMPLATE + SHARED META DESCRIPTION
@@ -55,12 +74,13 @@ const API_URL =
 // value is available.
 export async function generateMetadata(): Promise<Metadata> {
   try {
-    const response = await fetch(`${API_URL}/settings/public`, {
-      cache: "no-store",
-    });
+    const settings = await getPublicSettings();
 
-    const data = await response.json();
-    const general = data?.data?.general || {};
+    if (!settings) {
+      throw new Error("Public settings unavailable");
+    }
+
+    const general = settings.general || {};
 
     const siteName = general.site_name || "Gamzzones";
     const siteDescription = general.site_description || "Gaming Platform";
@@ -83,20 +103,28 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const settings = await getPublicSettings();
+
+  // system.maintenance_mode drives MaintenanceGate's first
+  // paint; the gate skips /admin routes itself.
+  const maintenance = settings?.system?.maintenance_mode === true;
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {children}
-        <ResponsibleGamingPopup />
-        <CookieConsent />
+        <MaintenanceGate initialMaintenance={maintenance}>
+          {children}
+          <ResponsibleGamingPopup />
+          <CookieConsent />
+        </MaintenanceGate>
       </body>
     </html>
   );

@@ -459,10 +459,10 @@ export default function AdminSupportPage() {
                             <AdminTableCell>
                                 <AdminBadge variant={STATUS_VARIANT[item.status]}>{item.status}</AdminBadge>
                             </AdminTableCell>
-                            <AdminTableCell className="text-slate-400">
+                            <AdminTableCell className="text-slate-400 text-xs">
                                 {item.assignedAdmin?.name || item.assignedAdmin?.username || "Unassigned"}
                             </AdminTableCell>
-                            <AdminTableCell className="text-slate-500">{formatDate(item.lastMessageAt)}</AdminTableCell>
+                            <AdminTableCell className="text-slate-500 text-xs">{formatDate(item.lastMessageAt)}</AdminTableCell>
                         </AdminTableRow>
                     ))}
                 </AdminTable>

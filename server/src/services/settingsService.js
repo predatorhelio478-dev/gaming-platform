@@ -120,6 +120,30 @@ const valuesAreEqual = (
 
 
 // ==========================================================
+// GAME ENGINE MAINTENANCE SYNC
+// ==========================================================
+//
+// Freezes/releases the game the moment system.maintenance_mode
+// is saved, instead of waiting for the engine's periodic check.
+// Required lazily: the game engine itself (via roundManager)
+// depends on this module.
+
+const syncGameMaintenance = (category) => {
+
+    if (category !== "system") {
+
+        return;
+
+    }
+
+    require("../game/engine/gameEngine")
+        .syncMaintenanceMode()
+        .catch(() => {});
+
+};
+
+
+// ==========================================================
 // GET ALL SETTINGS
 // ==========================================================
 
@@ -899,6 +923,8 @@ const updateSettings = async (
 
             settingsCache.invalidate();
 
+            syncGameMaintenance(category);
+
         }
 
 
@@ -1167,6 +1193,8 @@ const resetSettings = async (
         ) {
 
             settingsCache.invalidate();
+
+            syncGameMaintenance(category);
 
         }
 

@@ -19,6 +19,7 @@ import AdminTable, {
 } from "../ui/AdminTable";
 
 import AdminBadge from "../ui/AdminBadge";
+import AdminCheckbox from "../ui/AdminCheckbox";
 import AdminPagination from "../ui/AdminPagination";
 import AdminActionsMenu from "../ui/AdminActionsMenu";
 
@@ -44,6 +45,14 @@ export default function UserTable({
     onPageChange,
     canManuallyVerify = false,
     onRequestVerification,
+    // { email, mobile } - which verifications Settings -> User
+    // currently requires (same rule as the withdrawal gate).
+    verificationRequired = { email: false, mobile: false },
+    currentAdminEmail = null,
+    bulkEnabled = false,
+    selectedIds = [],
+    onSelectionChange,
+    onBulkDelete,
 }) {
 
     const page =
@@ -75,6 +84,51 @@ export default function UserTable({
         !Array.isArray(users) ||
         users.length === 0;
 
+
+    const isOwnAccount =
+        (user) =>
+            Boolean(currentAdminEmail) &&
+            String(user?.email || "").toLowerCase() ===
+            String(currentAdminEmail).toLowerCase();
+
+
+    // ==================================================
+    // BULK SELECTION (checkbox column + Delete Selected)
+    // ==================================================
+    //
+    // Only rows the viewer could delete one-by-one are
+    // selectable - never their own account. The server
+    // re-validates every id with the single-delete rules.
+
+    const isSelectable =
+        (user) => bulkEnabled && user?.role !== "admin" && !isOwnAccount(user) && !user?.isPermanentlyDeleted;
+
+    const selectableIds =
+        users
+            .filter(isSelectable)
+            .map((user) => String(user?._id));
+
+    const selectedSet =
+        new Set(selectedIds.map(String));
+
+    const selectedCount =
+        selectableIds.filter((id) => selectedSet.has(id)).length;
+
+    const allSelected =
+        selectableIds.length > 0 &&
+        selectedCount === selectableIds.length;
+
+    const toggleOne =
+        (id, checked) => {
+            const next = new Set(selectedSet);
+            if (checked) next.add(id); else next.delete(id);
+            onSelectionChange?.([...next]);
+        };
+
+    const toggleAll =
+        (checked) => {
+            onSelectionChange?.(checked ? selectableIds : []);
+        };
 
     // ==================================================
     // HEADERS
@@ -123,6 +177,26 @@ export default function UserTable({
         },
 
     ];
+
+    // Checkbox column first when bulk delete is available.
+    const tableHeaders =
+        bulkEnabled
+            ? [
+                {
+                    key: "select",
+                    label: (
+                        <AdminCheckbox
+                            ariaLabel="Select all"
+                            checked={allSelected}
+                            indeterminate={selectedCount > 0}
+                            disabled={selectableIds.length === 0}
+                            onChange={toggleAll}
+                        />
+                    ),
+                },
+                ...headers,
+            ]
+            : headers;
 
 
     // ==================================================
@@ -325,14 +399,25 @@ export default function UserTable({
     // VERIFICATION
     // ==================================================
 
-    const isVerified =
-        (user) =>
-            Boolean(
-                user?.emailVerified
-            ) &&
-            Boolean(
-                user?.mobileVerified
-            );
+    // Per channel: a REQUIRED channel shows its real status as
+    // Verified / Unverified (amber when missing). A channel that
+    // isn't required is never shown as a missing requirement -
+    // verified still shows as verified, otherwise a neutral
+    // "optional".
+    const getChannelBadge =
+        (verified, required) => {
+
+            if (verified) {
+
+                return { variant: "success", text: "Verified", Icon: ShieldCheck };
+
+            }
+
+            return required
+                ? { variant: "warning", text: "Unverified", Icon: ShieldAlert }
+                : { variant: "default", text: "Optional", Icon: null };
+
+        };
 
 
     return (
@@ -353,7 +438,20 @@ export default function UserTable({
             }
 
             headers={
-                headers
+                tableHeaders
+            }
+            headerAction={
+                selectedCount > 0 && (
+                    <button
+                        type="button"
+                        onClick={onBulkDelete}
+                        disabled={actionLoading}
+                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/[0.05] px-3 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <Trash2 size={13} />
+                        Delete Selected ({selectedCount})
+                    </button>
+                )
             }
             empty={
                 isEmpty
@@ -378,15 +476,32 @@ export default function UserTable({
                         );
 
 
-                    const verified =
-                        isVerified(
-                            user
-                        );
+                    const channelBadges = [
+                        {
+                            key: "email",
+                            label: "Email",
+                            ...getChannelBadge(Boolean(user?.emailVerified), verificationRequired.email),
+                        },
+                        {
+                            key: "mobile",
+                            label: "Mobile",
+                            ...getChannelBadge(Boolean(user?.mobileVerified), verificationRequired.mobile),
+                        },
+                    ];
 
 
                     const admin =
                         user?.role ===
                         "admin";
+
+
+                    // The logged-in admin's own player account
+                    // (same email) - editable, never deletable.
+                    // Also refused server-side.
+                    const isSelf =
+                        Boolean(currentAdminEmail) &&
+                        String(user?.email || "").toLowerCase() ===
+                        String(currentAdminEmail).toLowerCase();
 
 
                     return (
@@ -397,7 +512,34 @@ export default function UserTable({
                                 user?.id ||
                                 user?.username
                             }
+                            className={
+                                selectedSet.has(String(user?._id))
+                                    ? "bg-purple-500/[0.04]"
+                                    : ""
+                            }
                         >
+
+                            {bulkEnabled && (
+
+                                <AdminTableCell className="w-10">
+
+                                    <AdminCheckbox
+                                        ariaLabel="Select row"
+                                        checked={selectedSet.has(String(user?._id))}
+                                        disabled={!isSelectable(user)}
+                                        title={
+                                            isSelf
+                                                ? "You cannot delete your own account"
+                                                : !isSelectable(user)
+                                                    ? "You cannot delete this account"
+                                                    : "Select"
+                                        }
+                                        onChange={(checked) => toggleOne(String(user?._id), checked)}
+                                    />
+
+                                </AdminTableCell>
+
+                            )}
 
                             {/* =================================================
                                 USER
@@ -589,37 +731,29 @@ export default function UserTable({
 
                             <AdminTableCell>
 
-                                {verified ? (
+                                <div className="flex flex-col items-start gap-1">
 
-                                    <AdminBadge
-                                        variant="success"
-                                    >
+                                    {channelBadges.map(({ key, label, variant, text, Icon }) => (
 
-                                        <ShieldCheck
-                                            size={11}
-                                            className="mr-1"
-                                        />
+                                        <AdminBadge
+                                            key={key}
+                                            variant={variant}
+                                        >
 
-                                        Verified
+                                            {Icon && (
+                                                <Icon
+                                                    size={11}
+                                                    className="mr-1"
+                                                />
+                                            )}
 
-                                    </AdminBadge>
+                                            {label} · {text}
 
-                                ) : (
+                                        </AdminBadge>
 
-                                    <AdminBadge
-                                        variant="warning"
-                                    >
+                                    ))}
 
-                                        <ShieldAlert
-                                            size={11}
-                                            className="mr-1"
-                                        />
-
-                                        Unverified
-
-                                    </AdminBadge>
-
-                                )}
+                                </div>
 
                             </AdminTableCell>
 
@@ -873,7 +1007,7 @@ export default function UserTable({
                                         DELETE (PERMANENT)
                                     ================================================== */}
 
-                                    {!admin && !user?.isPermanentlyDeleted && (
+                                    {!admin && !isSelf && !user?.isPermanentlyDeleted && (
 
                                         <button
                                             type="button"
@@ -940,7 +1074,7 @@ export default function UserTable({
                                                     }
                                             ),
 
-                                            !admin && !user?.isDeleted && !user?.isPermanentlyDeleted && {
+                                            !admin && !isSelf && !user?.isDeleted && !user?.isPermanentlyDeleted && {
                                                 key: "deactivate",
                                                 label: "Deactivate User",
                                                 icon: UserX,

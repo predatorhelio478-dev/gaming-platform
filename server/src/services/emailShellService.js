@@ -93,10 +93,10 @@ const buildEmailHtml = async ({
                 <tr>
                     <td style="padding:32px;color:#e2e4f0;">
                         ${heading
-            ? `<h1 style="margin:0 0 16px 0;font-size:19px;font-weight:800;color:#ffffff;">${escapeHtml(heading)}</h1>`
+            ? `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:800;color:#ffffff;">${escapeHtml(heading)}</h1>`
             : ""
         }
-                        <div style="font-size:14px;line-height:22px;color:#c3c6db;">
+                        <div style="font-size:16px;line-height:22px;color:#c3c6db;">
                             ${bodyHtml}
                         </div>
                     </td>
@@ -107,13 +107,13 @@ const buildEmailHtml = async ({
                 <!-- FOOTER -->
                 <tr>
                     <td style="padding:24px 32px;border-top:1px solid #23263a;background-color:#0e0f1a;">
-                        <p style="margin:0 0 6px 0;font-size:12px;color:#7c8098;">
+                        <p style="margin:0 0 6px 0;font-size:14px;color:#7c8098;">
                             Need help? ${contactLine ? contactLine : "Contact our support team from your account."}
                         </p>
-                        <p style="margin:0;font-size:11px;color:#565a70;">
+                        <p style="margin:0;font-size:13px;color:#7c8098;">
                             &copy; ${year} ${escapeHtml(siteName)}. All rights reserved.
                         </p>
-                        <p style="margin:8px 0 0 0;font-size:10px;color:#464a5e;">
+                        <p style="margin:8px 0 0 0;font-size:12px;color:#7c8098;">
                             This is an automated message - please do not reply directly to this email.
                         </p>
                     </td>

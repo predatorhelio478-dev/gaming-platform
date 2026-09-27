@@ -1,5 +1,7 @@
 "use client";
 
+import BulkDeleteModal from "../../../components/admin/ui/BulkDeleteModal";
+import BulkDeleteFeedback from "../../../components/admin/ui/BulkDeleteFeedback";
 import {
     useCallback,
     useEffect,
@@ -56,6 +58,7 @@ import {
     adjustAdminUserBalance,
     deactivateAdminUser,
     deleteAdminUser,
+    bulkDeleteAdminUsers,
     changeAdminUserPassword,
     manuallyVerifyUserEmail,
     manuallyVerifyUserMobile,
@@ -215,6 +218,24 @@ export default function UsersPage() {
     const [currentAdminRole, setCurrentAdminRole] =
         useState(null);
 
+    // Used to recognise the admin's own player account (same
+    // email) so Delete/Deactivate is never offered on it.
+    const [currentAdminEmail, setCurrentAdminEmail] =
+        useState(null);
+
+    // Bulk delete: selected row ids, confirm modal, result banner.
+    const [selectedIds, setSelectedIds] =
+        useState([]);
+
+    const [bulkModalOpen, setBulkModalOpen] =
+        useState(false);
+
+    const [bulkDeleting, setBulkDeleting] =
+        useState(false);
+
+    const [bulkFeedback, setBulkFeedback] =
+        useState(null);
+
     useEffect(() => {
 
         let mounted = true;
@@ -223,6 +244,7 @@ export default function UsersPage() {
             .then((response) => {
                 if (mounted) {
                     setCurrentAdminRole(response?.admin?.role || null);
+                    setCurrentAdminEmail(response?.admin?.email || null);
                 }
             })
             .catch(() => {});
@@ -2299,6 +2321,78 @@ export default function UsersPage() {
     };
 
 
+
+    // ==================================================
+    // BULK DELETE
+    // ==================================================
+    //
+    // Only ids still visible on this page are sent (a stale
+    // selection from another page/filter is ignored); the
+    // server re-validates each one.
+
+    const selectedOnPage =
+        selectedIds.filter((id) =>
+            users.some((row) => String(row?._id) === String(id))
+        );
+
+    const handleConfirmBulkDelete =
+        async () => {
+
+            const ids = [...selectedOnPage];
+
+            if (ids.length === 0) return;
+
+            const labelFor = (id) => {
+                const row = users.find((item) => String(item?._id) === String(id));
+                return row ? `@${row.username}` : id;
+            };
+
+            const toFeedback = (data) => ({
+                message: data?.message || "Bulk delete finished.",
+                deletedCount: data?.deleted?.length || 0,
+                failed: (data?.failed || []).map((item) => ({
+                    label: labelFor(item.id),
+                    reason: item.reason,
+                })),
+            });
+
+            setBulkDeleting(true);
+
+            try {
+
+                setBulkFeedback(toFeedback(await bulkDeleteAdminUsers(ids)));
+
+            } catch (requestError) {
+
+                setBulkFeedback(
+                    requestError?.data?.failed
+                        ? toFeedback(requestError.data)
+                        : {
+                            message: requestError?.message || "Unable to delete the selected users.",
+                            deletedCount: 0,
+                            failed: [],
+                        }
+                );
+
+            } finally {
+
+                setBulkDeleting(false);
+                setBulkModalOpen(false);
+                setSelectedIds([]);
+
+            }
+
+            // Deleted accounts drop out of the default list right away.
+            await Promise.allSettled([
+                fetchUsers({
+                    page: pagination?.page || 1,
+                    showRefreshing: true,
+                }),
+                fetchStats(),
+            ]);
+
+        };
+
     const handleConfirmDeleteUser =
         async () => {
 
@@ -2546,6 +2640,22 @@ export default function UsersPage() {
                 )}
 
 
+                <BulkDeleteFeedback
+                    feedback={bulkFeedback}
+                    onDismiss={() => setBulkFeedback(null)}
+                />
+
+                <BulkDeleteModal
+                    open={bulkModalOpen}
+                    count={selectedOnPage.length}
+                    noun="user"
+                    description="Each account is anonymized and can no longer log in. Wallet, bet, transaction and audit history is preserved."
+                    actionLoading={bulkDeleting}
+                    onClose={() => setBulkModalOpen(false)}
+                    onConfirm={handleConfirmBulkDelete}
+                />
+
+
                 {/* =====================================================
                     USER STATS
                 ===================================================== */}
@@ -2603,10 +2713,22 @@ export default function UsersPage() {
                     onUnblock={handleUnblockUser}
                     onDeactivate={handleDeactivateUser}
                     onDelete={handleOpenDeleteModal}
+                    currentAdminEmail={currentAdminEmail}
+                    bulkEnabled={
+                        currentAdminRole === "super_admin" ||
+                        currentAdminRole === "admin"
+                    }
+                    selectedIds={selectedOnPage}
+                    onSelectionChange={setSelectedIds}
+                    onBulkDelete={() => setBulkModalOpen(true)}
                     actionLoading={actionLoading}
                     onPageChange={handlePageChange}
                     canManuallyVerify={currentAdminRole === "super_admin"}
                     onRequestVerification={handleRequestVerification}
+                    verificationRequired={
+                        stats?.verificationRequirements ||
+                        { email: false, mobile: false }
+                    }
                 />
 
                 {/* =====================================================

@@ -1,3 +1,9 @@
+const {
+    parseBulkIds,
+    runBulk,
+    sendBulkResult,
+} = require("../utils/bulkIds");
+
 const adminManagementService =
     require("../services/adminManagementService");
 
@@ -27,7 +33,7 @@ const listAdmins = async (req, res) => {
 
     try {
 
-        const { page = 1, limit = 20, search = "", role = "all", status = "all" } = req.query;
+        const { page = 1, limit = 20, search = "", role = "all", status = "active" } = req.query;
 
         const result = await adminManagementService.listAdmins({ page, limit, search, role, status });
 
@@ -165,6 +171,93 @@ const updateAdmin = async (req, res) => {
 // DEACTIVATE ADMIN ("delete")
 // ======================================================
 
+// DELETE /api/admin/admins/bulk   body: { ids: [...] }
+//
+// Every id goes through adminManagementService.deleteAdmin -
+// the same checks as the single Delete (never your own
+// account, only a super_admin may delete a super_admin),
+// one at a time; partial failures are reported per id.
+const bulkDeleteAdmins = async (req, res) => {
+
+    try {
+
+        const { ids, invalid } = parseBulkIds(req.body?.ids);
+
+        const result = await runBulk(ids, async (id) => {
+
+            const outcome = await adminManagementService.deleteAdmin(id, req.admin);
+
+            await createAuditLog({
+                actorType: "admin",
+                actorId: req.admin?._id || null,
+                action: "admin.deleted",
+                module: "admin_management",
+                key: id,
+                oldValue: outcome.original,
+                metadata: { bulk: true },
+                ...getRequestContext(req),
+            }).catch(() => {});
+
+            return { username: outcome.original.username };
+
+        });
+
+        result.failed.unshift(...invalid);
+
+        return sendBulkResult(res, result, "admin");
+
+    } catch (error) {
+
+        console.error("Admin Management Bulk Delete Error:", error);
+
+        return res.status(error.statusCode || 400).json({
+            success: false,
+            message: error.message || "Unable to delete the selected admins.",
+        });
+
+    }
+
+};
+
+
+const deleteAdmin = async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+        const result = await adminManagementService.deleteAdmin(id, req.admin);
+
+        await createAuditLog({
+            actorType: "admin",
+            actorId: req.admin?._id || null,
+            action: "admin.deleted",
+            module: "admin_management",
+            key: id,
+            oldValue: result.original,
+            ...getRequestContext(req),
+        }).catch(() => {});
+
+        return res.status(200).json({
+            success: true,
+            message: "Admin account permanently deleted.",
+            data: result.admin,
+        });
+
+    } catch (error) {
+
+        console.error("Admin Management Delete Error:", error);
+
+        return res.status(error.statusCode || 400).json({
+            success: false,
+            message: error.message || "Unable to delete admin.",
+        });
+
+    }
+
+};
+
+
 const deactivateAdmin = async (req, res) => {
 
     try {
@@ -267,6 +360,8 @@ const changeAdminPassword = async (req, res) => {
 
 
 module.exports = {
+    deleteAdmin,
+    bulkDeleteAdmins,
     listAdmins,
     createAdmin,
     updateAdmin,

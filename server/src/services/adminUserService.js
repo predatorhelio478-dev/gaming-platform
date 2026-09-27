@@ -29,6 +29,9 @@ const emailTemplateService =
 const settingsService =
     require("./settingsService");
 
+const verificationPolicy =
+    require("./verificationPolicy");
+
 
 // ======================================================
 // NOTIFY USER OF AN ADMIN-INITIATED CONTACT/VERIFICATION
@@ -278,7 +281,13 @@ const getUsers = async ({
         (page - 1) * limit;
 
 
-    const filter = {};
+    // Deactivated / permanently deleted accounts are hidden
+    // unless explicitly requested with status "deleted" -
+    // "all" means every EXISTING account (active + blocked).
+    const filter =
+        status === "deleted"
+            ? { isDeleted: true }
+            : { isDeleted: { $ne: true }, isPermanentlyDeleted: { $ne: true } };
 
 
     // ==================================================
@@ -1469,8 +1478,34 @@ const updateUserStatus = async (
 // authController.login).
 // ======================================================
 
+// An admin's "own account" in the Users module is the player
+// account registered with the same email as their admin login
+// (admins themselves live in the separate Admin collection).
+const assertNotOwnAccount = (user, actingAdmin) => {
+
+    const adminEmail =
+        String(actingAdmin?.email || "").trim().toLowerCase();
+
+    if (
+        adminEmail &&
+        String(user?.email || "").trim().toLowerCase() === adminEmail
+    ) {
+
+        const error = new Error(
+            "You cannot delete or deactivate your own account."
+        );
+
+        error.statusCode = 403;
+
+        throw error;
+
+    }
+
+};
+
 const deactivateUser = async (
-    userId
+    userId,
+    actingAdmin = null
 ) => {
 
     if (
@@ -1512,6 +1547,8 @@ const deactivateUser = async (
 
     }
 
+
+    assertNotOwnAccount(user, actingAdmin);
 
     if (user.isDeleted) {
 
@@ -1562,7 +1599,8 @@ const deactivateUser = async (
 // ======================================================
 
 const deleteUser = async (
-    userId
+    userId,
+    actingAdmin = null
 ) => {
 
     if (
@@ -1604,6 +1642,8 @@ const deleteUser = async (
 
     }
 
+
+    assertNotOwnAccount(user, actingAdmin);
 
     if (user.isPermanentlyDeleted) {
 
@@ -2586,6 +2626,19 @@ const adjustUserBalance = async (
 
 const getUserStats = async () => {
 
+    // "Verified" follows the same rule as the withdrawal gate:
+    // a user counts as verified when every CURRENTLY required
+    // channel is verified (see verificationPolicy).
+    const verificationRequirements =
+        await verificationPolicy.getVerificationRequirements();
+
+    // Stats describe existing accounts only - the same set the
+    // Users list shows by default.
+    const existingOnly = {
+        isDeleted: { $ne: true },
+        isPermanentlyDeleted: { $ne: true },
+    };
+
 
     const [
 
@@ -2603,10 +2656,14 @@ const getUserStats = async () => {
 
     ] = await Promise.all([
 
-        User.countDocuments({}),
+        User.countDocuments({
+            ...existingOnly,
+        }),
 
 
         User.countDocuments({
+
+            ...existingOnly,
 
             status:
                 "active",
@@ -2619,6 +2676,8 @@ const getUserStats = async () => {
 
         User.countDocuments({
 
+            ...existingOnly,
+
             status:
                 "blocked",
 
@@ -2630,11 +2689,11 @@ const getUserStats = async () => {
 
         User.countDocuments({
 
-            emailVerified:
-                true,
+            ...existingOnly,
 
-            mobileVerified:
-                true,
+            ...verificationPolicy.buildVerifiedFilter(
+                verificationRequirements
+            ),
 
             role:
                 "user",
@@ -2644,10 +2703,11 @@ const getUserStats = async () => {
 
         User.countDocuments({
 
-            $or: [
-                { emailVerified: false },
-                { mobileVerified: false },
-            ],
+            ...existingOnly,
+
+            ...verificationPolicy.buildUnverifiedFilter(
+                verificationRequirements
+            ),
 
             role:
                 "user",
@@ -2787,6 +2847,8 @@ const getUserStats = async () => {
             Number(
                 verifiedUsers
             ),
+
+        verificationRequirements,
 
         unverifiedUsers:
             Number(

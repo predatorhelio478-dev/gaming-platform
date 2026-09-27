@@ -583,6 +583,17 @@ class BetService {
 
 
         if (
+            gameEngine.isMaintenanceHold()
+        ) {
+
+            throw new Error(
+                "The platform is currently under maintenance. Betting is temporarily unavailable."
+            );
+
+        }
+
+
+        if (
             gameEngine.isPaused()
         ) {
 
@@ -1177,6 +1188,17 @@ class BetService {
 
             throw new Error(
                 "Game is currently stopped. Betting is unavailable."
+            );
+
+        }
+
+
+        if (
+            gameEngine.isMaintenanceHold()
+        ) {
+
+            throw new Error(
+                "The platform is currently under maintenance. Betting is temporarily unavailable."
             );
 
         }

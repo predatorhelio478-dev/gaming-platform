@@ -1,4 +1,5 @@
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const mongoose = require("mongoose");
 
 const Admin = require("../models/Admin");
@@ -84,12 +85,16 @@ const assertCanModifyTarget = (actingAdmin, targetAdmin) => {
 // LIST ADMINS + ROLE COUNTS
 // ======================================================
 
-const listAdmins = async ({ page = 1, limit = 20, search = "", role = "all", status = "all" }) => {
+// Defaults to ACTIVE admins only - deactivated (soft-deleted)
+// accounts appear only when explicitly asked for with
+// status "deactivated" (or "all").
+const listAdmins = async ({ page = 1, limit = 20, search = "", role = "all", status = "active" }) => {
 
     const pageNum = Math.max(1, Number(page) || 1);
     const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
 
-    const filter = {};
+    // Permanently deleted admins never appear, under any filter.
+    const filter = { isDeleted: { $ne: true } };
 
     if (role !== "all" && ROLES.includes(role)) {
         filter.role = role;
@@ -124,7 +129,10 @@ const listAdmins = async ({ page = 1, limit = 20, search = "", role = "all", sta
 
         Admin.countDocuments(filter),
 
+        // Role counts describe the existing (active) team,
+        // never deactivated accounts.
         Admin.aggregate([
+            { $match: { isActive: { $ne: false }, isDeleted: { $ne: true } } },
             { $group: { _id: "$role", count: { $sum: 1 } } },
         ]),
 
@@ -210,7 +218,7 @@ const updateAdmin = async (id, updates, actingAdmin) => {
 
     const admin = await Admin.findById(id);
 
-    if (!admin) {
+    if (!admin || admin.isDeleted) {
         const error = new Error("Admin not found.");
         error.statusCode = 404;
         throw error;
@@ -358,7 +366,7 @@ const deactivateAdmin = async (id, actingAdmin) => {
 
     const admin = await Admin.findById(id);
 
-    if (!admin) {
+    if (!admin || admin.isDeleted) {
         const error = new Error("Admin not found.");
         error.statusCode = 404;
         throw error;
@@ -374,6 +382,69 @@ const deactivateAdmin = async (id, actingAdmin) => {
     await admin.save();
 
     return { admin: buildAdminResponse(admin), alreadyDeactivated: false };
+
+};
+
+
+// ======================================================
+// DELETE ADMIN (permanent)
+// ======================================================
+//
+// Same rules as deactivate: never your own account, and the
+// role hierarchy applies (only a super_admin may delete a
+// super_admin). The document is NOT removed - AuditLog.actorId
+// and other records keep resolving to it - but it is
+// anonymized (frees the username/email, no personal data
+// left), its password is replaced with an unusable random
+// hash, it is deactivated (existing sessions are refused by
+// adminAuth) and it is hidden from every admin list. It
+// cannot be edited or reactivated afterwards.
+// ======================================================
+
+const deleteAdmin = async (id, actingAdmin) => {
+
+    if (!isValidObjectId(id)) throw new Error("Invalid admin ID.");
+
+    if (String(id) === String(actingAdmin._id)) {
+
+        const error = new Error("You cannot delete your own account.");
+        error.statusCode = 403;
+        throw error;
+
+    }
+
+    const admin = await Admin.findById(id);
+
+    if (!admin || admin.isDeleted) {
+        const error = new Error("Admin not found.");
+        error.statusCode = 404;
+        throw error;
+    }
+
+    assertCanModifyTarget(actingAdmin, admin);
+
+    const original = {
+        username: admin.username,
+        email: admin.email,
+        role: admin.role,
+    };
+
+    const tag = String(admin._id);
+
+    admin.name = "Deleted Admin";
+    admin.username = `deleted_admin_${tag}`;
+    admin.email = `deleted_admin_${tag}@deleted.local`;
+    admin.mobile = "";
+    admin.password = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
+    admin.emailVerified = false;
+    admin.phoneVerified = false;
+    admin.isActive = false;
+    admin.isDeleted = true;
+    admin.deletedAt = new Date();
+
+    await admin.save();
+
+    return { admin: buildAdminResponse(admin), original };
 
 };
 
@@ -413,7 +484,7 @@ const changeAdminPassword = async (id, newPassword, actingAdmin) => {
 
     const admin = await Admin.findById(id);
 
-    if (!admin) {
+    if (!admin || admin.isDeleted) {
         const error = new Error("Admin not found.");
         error.statusCode = 404;
         throw error;
@@ -437,6 +508,7 @@ const changeAdminPassword = async (id, newPassword, actingAdmin) => {
 
 
 module.exports = {
+    deleteAdmin,
     listAdmins,
     createAdmin,
     updateAdmin,

@@ -13,6 +13,9 @@ const timer =
 const GameHistory =
     require("../../models/GameHistory");
 
+const GameEngineState =
+    require("../../models/GameEngineState");
+
 const GameRound =
     require("../../models/GameRound");
 
@@ -31,6 +34,9 @@ const {
 
 const notificationService =
     require("../../services/notificationService");
+
+const settingsCache =
+    require("../../services/settingsCache");
 
 const {
     createAuditLog,
@@ -55,6 +61,23 @@ let emergencyStopped = false;
 
 let isProcessingRound = false;
 
+// Maintenance Mode hold - deliberately separate from the admin
+// pause (gamePaused) so neither can silently undo the other:
+// ending maintenance never resumes a game an admin paused, and
+// an admin "Resume" never restarts the timer mid-maintenance.
+let maintenanceHold = false;
+
+// When the active round's timer was frozen (admin pause and/or
+// Maintenance Mode). One timestamp for both, so overlapping
+// freezes are counted once when the timer actually resumes.
+let timerFrozenAt = null;
+
+let maintenanceSyncPromise = null;
+
+let maintenanceSyncInterval = null;
+
+const MAINTENANCE_SYNC_INTERVAL_MS = 5000;
+
 
 // ==========================================
 // SOCKET BROADCAST
@@ -72,7 +95,7 @@ const broadcastGameState = () => {
             status:
                 emergencyStopped
                     ? "stopped"
-                    : gamePaused
+                    : gamePaused || maintenanceHold
                         ? "paused"
                         : gameRunning
                             ? (
@@ -80,6 +103,9 @@ const broadcastGameState = () => {
                                 "betting"
                             )
                             : "stopped",
+
+            maintenance:
+                maintenanceHold,
 
             round:
                 currentRound,
@@ -130,7 +156,7 @@ const getGameStatus = () => {
     const status =
         emergencyStopped
             ? "stopped"
-            : gamePaused
+            : gamePaused || maintenanceHold
                 ? "paused"
                 : gameRunning
                     ? "running"
@@ -150,6 +176,9 @@ const getGameStatus = () => {
             status === "stopped",
 
         emergencyStopped,
+
+        maintenance:
+            maintenanceHold,
 
         round:
             currentRound,
@@ -208,10 +237,57 @@ const startRound = async () => {
 
         }
 
+
+        /*
+         * Never open a round during Maintenance Mode - the
+         * hold's exit path starts one once maintenance ends.
+         */
+
+        if (
+            maintenanceHold ||
+            await isMaintenanceModeOn()
+        ) {
+
+            return;
+
+        }
+
+
+        if (isStartingRound) {
+
+            return;
+
+        }
+
+        isStartingRound = true;
+
+
+        /*
+         * Several paths can ask for a new round around the same
+         * moment (the post-settlement auto-start, a maintenance
+         * exit, an admin action). The DB - not in-memory state -
+         * decides: if a round is still open, don't create a
+         * second one.
+         */
+
+        const activeRoundExists =
+            await GameRound.exists({
+                status: {
+                    $in: ["betting", "locked"],
+                },
+            });
+
+        if (activeRoundExists) {
+
+            isStartingRound = false;
+
+            return;
+
+        }
+
         gameStatus = "running";
         gamePaused = false;
         pausedRemainingSeconds = null;
-        isStartingRound = true;
 
 
         /*
@@ -307,6 +383,8 @@ const startRound = async () => {
                 1
             );
 
+
+        timerFrozenAt = null;
 
         timer.startTimer(
             roundDuration,
@@ -695,6 +773,26 @@ const processRound = async () => {
 
 
         /*
+         * Timer ran out during (or right as) Maintenance Mode
+         * started - don't lock or settle now. The round stays
+         * exactly as it is; the hold's exit path settles it.
+         */
+
+        if (
+            maintenanceHold ||
+            await isMaintenanceModeOn()
+        ) {
+
+            isProcessingRound = false;
+
+            await enterMaintenanceHold();
+
+            return;
+
+        }
+
+
+        /*
          * Lock betting
          */
 
@@ -749,6 +847,24 @@ const processRound = async () => {
                 "Socket Betting Closed Error:",
                 error.message
             );
+
+        }
+
+
+        /*
+         * Last check before a result is decided - if
+         * maintenance started while locking, leave the round
+         * "locked" with no result; the hold's exit path
+         * settles it from these same, already-placed bets.
+         */
+
+        if (await isMaintenanceModeOn()) {
+
+            isProcessingRound = false;
+
+            await enterMaintenanceHold();
+
+            return;
 
         }
 
@@ -971,6 +1087,60 @@ const recoverOrphanedRound = async () => {
 
 
         /*
+         * Case 0: the round was frozen (admin pause or
+         * Maintenance Mode) when the process went down. Its
+         * endTime was never extended, so it may look expired -
+         * but the betting time it really had left is
+         * endTime - frozenAt. Restore it with exactly that,
+         * still frozen from the original frozenAt, so the
+         * eventual resume extends endTime by the whole frozen
+         * span (downtime included). startGame() then decides
+         * whether it stays frozen (admin pause / maintenance
+         * still on) or continues.
+         */
+
+        if (
+            orphanedRound.status === "betting" &&
+            orphanedRound.frozenAt &&
+            orphanedRound.endTime &&
+            orphanedRound.endTime.getTime() > orphanedRound.frozenAt.getTime()
+        ) {
+
+            const remainingSeconds =
+                Math.max(
+                    Math.ceil(
+                        (orphanedRound.endTime.getTime() - orphanedRound.frozenAt.getTime()) / 1000
+                    ),
+                    1
+                );
+
+            console.warn(
+                `Recovering round #${orphanedRound.roundNumber} - frozen at ${orphanedRound.frozenAt.toISOString()} with ${remainingSeconds}s left, restoring it frozen.`
+            );
+
+            currentRound =
+                orphanedRound;
+
+            gameStatus =
+                "running";
+
+            timer.startTimer(
+                remainingSeconds,
+                processRound
+            );
+
+            // Paused before its first tick (1s away).
+            timer.pauseTimer();
+
+            timerFrozenAt =
+                orphanedRound.frozenAt.getTime();
+
+            return true;
+
+        }
+
+
+        /*
          * Case 1: still genuinely within its original betting
          * window - nothing has actually gone wrong.
          */
@@ -998,6 +1168,8 @@ const recoverOrphanedRound = async () => {
 
             gameStatus =
                 "running";
+
+            timerFrozenAt = null;
 
             timer.startTimer(
                 remainingSeconds,
@@ -1097,15 +1269,71 @@ const startGame = async () => {
     );
 
 
+    startMaintenanceWatcher();
+
+
     const resumedExistingRound =
         await recoverOrphanedRound();
+
+
+    /*
+     * A persisted admin pause survives a restart: the game
+     * comes back paused (with any recovered round still
+     * frozen) until an admin resumes it.
+     */
+
+    const engineState =
+        await loadEngineState();
+
+    if (engineState?.adminPaused) {
+
+        gamePaused = true;
+
+        gameStatus = "paused";
+
+        await freezeRoundTimer();
+
+        pausedRemainingSeconds =
+            timer.getCountdown();
+
+        console.log(
+            "Game Paused By Admin (restored after restart)"
+        );
+
+    }
+
+
+    /*
+     * On a boot during Maintenance Mode: a round resumed by
+     * recovery is frozen straight away, and startRound()
+     * below declines to open a new one.
+     */
+
+    if (await isMaintenanceModeOn()) {
+
+        await enterMaintenanceHold();
+
+    }
 
 
     if (!resumedExistingRound) {
 
         await startRound();
 
+    } else if (
+        timerFrozenAt !== null &&
+        !gamePaused &&
+        !maintenanceHold
+    ) {
+
+        // Recovered frozen, but whatever froze it has since
+        // been lifted (e.g. maintenance switched off while the
+        // server was down) - carry on, extending endTime.
+        await continueActiveRound();
+
     }
+
+    broadcastGameState();
 
 
     return {
@@ -1159,10 +1387,18 @@ const pauseGame = async () => {
 
 
     /*
-     * Pause timer
+     * Pause timer - remaining time is preserved on the timer,
+     * and resumeGame() extends endTime by the pause duration.
+     * Both the round's frozenAt and the pause itself are
+     * written to MongoDB before this returns, so a restart
+     * during the pause restores it instead of cancelling the
+     * round.
      */
 
-    timer.pauseTimer();
+    await freezeRoundTimer();
+
+    const persisted =
+        await persistAdminPause(true);
 
 
     /*
@@ -1187,6 +1423,8 @@ const pauseGame = async () => {
         success: true,
 
         status: "paused",
+
+        persisted,
 
         round:
             currentRound,
@@ -1214,6 +1452,34 @@ const resumeGame = async () => {
     }
 
 
+    if (maintenanceHold) {
+
+        // Clears the admin pause, but the timer stays frozen
+        // until Maintenance Mode is turned off.
+        gamePaused = false;
+
+        pausedRemainingSeconds = null;
+
+        await persistAdminPause(false);
+
+        broadcastGameState();
+
+        return {
+
+            success: true,
+
+            status: "paused",
+
+            maintenance: true,
+
+            message:
+                "Maintenance Mode is active - the game will resume automatically when it is turned off.",
+
+        };
+
+    }
+
+
     if (!gamePaused) {
 
         return {
@@ -1234,29 +1500,21 @@ const resumeGame = async () => {
 
     gameStatus = "running";
 
+    pausedRemainingSeconds = null;
 
-    /*
-     * Restore betting
-     */
-
-    if (currentRound) {
-
-        currentRound.status =
-            "betting";
-
-        await currentRound.save();
-
-    }
+    await persistAdminPause(false);
 
 
     /*
-     * Resume timer
+     * Pausing never changes the round's persisted status, so
+     * there's nothing to "restore" - forcing it back to
+     * "betting" here used to reopen betting on a round that
+     * was already locked and mid-settlement. Continue the
+     * active round exactly like the end of Maintenance Mode:
+     * endTime is extended by the exact pause duration.
      */
 
-    timer.resumeTimer();
-
-
-    broadcastGameState();
+    await continueActiveRound();
 
 
     console.log(
@@ -1311,12 +1569,16 @@ const stopGame = async () => {
 
     pausedRemainingSeconds = null;
 
+    await persistAdminPause(false);
+
 
     /*
      * Stop timer
      */
 
     timer.stopTimer();
+
+    timerFrozenAt = null;
 
 
     /*
@@ -1367,12 +1629,16 @@ const emergencyStop = async () => {
     pausedRemainingSeconds = null;
     emergencyStopped = true;
 
+    await persistAdminPause(false);
+
 
     /*
      * Immediately stop timer
      */
 
     timer.stopTimer();
+
+    timerFrozenAt = null;
 
 
     /*
@@ -1463,6 +1729,15 @@ const startNewRound = async () => {
     }
 
 
+    if (maintenanceHold) {
+
+        throw new Error(
+            "Maintenance Mode is active - a new round will start automatically when it is turned off."
+        );
+
+    }
+
+
     /*
      * Stop current timer
      */
@@ -1527,6 +1802,8 @@ const startNewRound = async () => {
     gameStatus = "running";
 
     pausedRemainingSeconds = null;
+
+    await persistAdminPause(false);
 
 
     /*
@@ -1608,6 +1885,446 @@ const voidCurrentRound = async () => {
             currentRound,
 
     };
+
+};
+
+
+// ==========================================
+// FREEZE / UNFREEZE ROUND TIMER
+// ==========================================
+//
+// Shared by the admin pause and Maintenance Mode. Freezing
+// keeps the remaining seconds on the timer and records when it
+// stopped; unfreezing pushes the round's endTime forward by
+// exactly the time spent frozen (betService rejects bets after
+// endTime, so without this a long pause left the resumed round
+// rejecting every bet) and adds it to round.pausedMs.
+// ==========================================
+
+const freezeRoundTimer = async () => {
+
+    if (!timer.isRunning()) {
+
+        return;
+
+    }
+
+    if (!timer.getPaused()) {
+
+        timer.pauseTimer();
+
+    }
+
+    if (timerFrozenAt !== null) {
+
+        return;
+
+    }
+
+    timerFrozenAt = Date.now();
+
+    if (
+        currentRound &&
+        currentRound.status === "betting" &&
+        !currentRound.result
+    ) {
+
+        try {
+
+            currentRound.frozenAt =
+                new Date(timerFrozenAt);
+
+            await currentRound.save();
+
+        } catch (error) {
+
+            // The in-memory freeze already happened - only
+            // restart-recovery precision is affected.
+            console.error(
+                "Persist Round Freeze Error:",
+                error.message
+            );
+
+        }
+
+    }
+
+};
+
+const unfreezeRoundTimer = async () => {
+
+    const frozenAt = timerFrozenAt;
+
+    timerFrozenAt = null;
+
+    if (
+        frozenAt !== null &&
+        currentRound &&
+        currentRound.status === "betting" &&
+        !currentRound.result
+    ) {
+
+        const frozenMs =
+            Date.now() - frozenAt;
+
+        currentRound.endTime =
+            new Date(
+                currentRound.endTime.getTime() + frozenMs
+            );
+
+        currentRound.pausedMs =
+            (currentRound.pausedMs || 0) + frozenMs;
+
+        currentRound.frozenAt =
+            null;
+
+        // Saved BEFORE the timer resumes, so no bet can be
+        // checked against the old endTime once it's running.
+        await currentRound.save();
+
+    }
+
+    timer.resumeTimer();
+
+};
+
+
+// ==========================================
+// PERSISTED ADMIN PAUSE
+// ==========================================
+
+const ENGINE_STATE_ID = "color_prediction";
+
+const loadEngineState = async () => {
+
+    try {
+
+        return await GameEngineState.findById(
+            ENGINE_STATE_ID
+        ).lean();
+
+    } catch (error) {
+
+        console.error(
+            "Load Engine State Error:",
+            error.message
+        );
+
+        return null;
+
+    }
+
+};
+
+// Returns whether the write succeeded. A failed write never
+// undoes the in-memory pause/resume - it's logged and reported
+// to the admin instead.
+const persistAdminPause = async (paused) => {
+
+    try {
+
+        await GameEngineState.updateOne(
+            { _id: ENGINE_STATE_ID },
+            {
+                $set: {
+                    adminPaused: paused,
+                    pausedAt: paused ? new Date() : null,
+                },
+            },
+            { upsert: true }
+        );
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            "Persist Admin Pause Error:",
+            error.message
+        );
+
+        return false;
+
+    }
+
+};
+
+
+// ==========================================
+// CONTINUE ACTIVE ROUND
+// ==========================================
+//
+// The single "carry on" path after an admin resume or the end
+// of Maintenance Mode. Callers have already checked the game is
+// running and neither paused, stopped nor held.
+//
+//   - settlement already underway -> it finishes on its own
+//     and auto-starts the next round;
+//   - open round with time left -> unfreeze (endTime extended
+//     by the exact frozen duration);
+//   - open round whose betting window already ended -> settle
+//     it from the bets placed while it was open;
+//   - result decided but settlement unfinished -> finish it
+//     (idempotent, no double payouts);
+//   - no open round -> start one (startRound refuses if the DB
+//     still has an open round, so never a duplicate).
+// ==========================================
+
+const continueActiveRound = async () => {
+
+    if (isProcessingRound || isStartingRound) {
+
+        broadcastGameState();
+
+        return;
+
+    }
+
+    if (
+        currentRound &&
+        currentRound.result &&
+        !["completed", "void"].includes(currentRound.status)
+    ) {
+
+        await finalizeRoundSettlement(
+            currentRound,
+            currentRound.result
+        );
+
+    }
+
+    const roundIsOpen =
+        currentRound &&
+        !currentRound.result &&
+        ["betting", "locked"].includes(currentRound.status);
+
+    if (!roundIsOpen) {
+
+        timerFrozenAt = null;
+
+        await startRound();
+
+        return;
+
+    }
+
+    if (
+        currentRound.status === "betting" &&
+        timer.isRunning() &&
+        timer.getCountdown() > 0
+    ) {
+
+        await unfreezeRoundTimer();
+
+        broadcastGameState();
+
+        return;
+
+    }
+
+    timerFrozenAt = null;
+
+    timer.stopTimer();
+
+    await processRound();
+
+};
+
+
+// ==========================================
+// MAINTENANCE MODE HOLD
+// ==========================================
+//
+// system.maintenance_mode freezes the game without touching
+// the active round's persisted state:
+//
+// ENTER - the round timer is paused. No bet is accepted
+//   (maintenanceMiddleware blocks the API, and betService
+//   checks isMaintenanceHold()), no result is generated
+//   (processRound checks before locking AND before deciding
+//   a result) and no new round is opened (startRound). A
+//   settlement that already has a decided result is allowed
+//   to finish - stopping half-way would strand payouts.
+//
+// EXIT - the same round continues:
+//   - time left on its timer -> endTime is moved forward by
+//     exactly the time spent frozen (see unfreezeRoundTimer)
+//     and the timer resumes;
+//   - no time left (the timer expired as maintenance began)
+//     -> it is settled normally from the bets placed while
+//     betting was open;
+//   - no open round -> a fresh round is started.
+//   Nothing is refunded on this path. If the process
+//   restarts during maintenance, recoverOrphanedRound's
+//   existing refund-exactly-once logic applies as usual.
+//
+// An admin pause/stop/emergency stop always wins - exiting
+// maintenance never restarts a game an admin halted.
+// ==========================================
+
+const isMaintenanceModeOn = async () => {
+
+    try {
+
+        return (
+            await settingsCache.getValue(
+                "system",
+                "maintenance_mode",
+                false
+            )
+        ) === true;
+
+    } catch {
+
+        // Settings unreadable: keep the current state rather
+        // than flapping the game on a transient DB error.
+        return maintenanceHold;
+
+    }
+
+};
+
+const enterMaintenanceHold = async () => {
+
+    if (maintenanceHold) {
+
+        return;
+
+    }
+
+    maintenanceHold = true;
+
+    await freezeRoundTimer();
+
+    console.log(
+        `Game held for Maintenance Mode${currentRound ? ` (round ${currentRound.roundNumber}, ${timer.getCountdown()}s left)` : ""}`
+    );
+
+    createAuditLog({
+        actorType: "system",
+        action: "game.maintenance_hold",
+        module: "game",
+        key: currentRound ? String(currentRound.roundNumber) : "none",
+        metadata: {
+            roundId: currentRound ? String(currentRound._id) : null,
+            remainingSeconds: timer.getCountdown(),
+        },
+    }).catch(() => {});
+
+    broadcastGameState();
+
+};
+
+const exitMaintenanceHold = async () => {
+
+    if (!maintenanceHold) {
+
+        return;
+
+    }
+
+    maintenanceHold = false;
+
+    console.log(
+        "Maintenance Mode ended - releasing game hold"
+    );
+
+    createAuditLog({
+        actorType: "system",
+        action: "game.maintenance_resume",
+        module: "game",
+        key: currentRound ? String(currentRound.roundNumber) : "none",
+        metadata: {
+            roundId: currentRound ? String(currentRound._id) : null,
+            remainingSeconds: timer.getCountdown(),
+        },
+    }).catch(() => {});
+
+    if (
+        !gameRunning ||
+        gamePaused ||
+        emergencyStopped
+    ) {
+
+        broadcastGameState();
+
+        return;
+
+    }
+
+    await continueActiveRound();
+
+};
+
+// Serialized so the settings hook and the periodic watcher can
+// never enter/exit concurrently.
+const syncMaintenanceMode = () => {
+
+    if (!maintenanceSyncPromise) {
+
+        maintenanceSyncPromise =
+            (async () => {
+
+                try {
+
+                    const maintenanceOn =
+                        await isMaintenanceModeOn();
+
+                    if (maintenanceOn && !maintenanceHold) {
+
+                        await enterMaintenanceHold();
+
+                    } else if (!maintenanceOn && maintenanceHold) {
+
+                        await exitMaintenanceHold();
+
+                    }
+
+                } catch (error) {
+
+                    console.error(
+                        "Maintenance Sync Error:",
+                        error.message
+                    );
+
+                } finally {
+
+                    maintenanceSyncPromise = null;
+
+                }
+
+            })();
+
+    }
+
+    return maintenanceSyncPromise;
+
+};
+
+// Safety net alongside the immediate hook in settingsService
+// (covers e.g. a direct DB edit, picked up once the 60s
+// settings cache expires).
+const startMaintenanceWatcher = () => {
+
+    if (maintenanceSyncInterval) {
+
+        return;
+
+    }
+
+    maintenanceSyncInterval =
+        setInterval(
+            syncMaintenanceMode,
+            MAINTENANCE_SYNC_INTERVAL_MS
+        );
+
+    maintenanceSyncInterval.unref?.();
+
+};
+
+const isMaintenanceHold = () => {
+
+    return maintenanceHold;
 
 };
 
@@ -1707,5 +2424,14 @@ module.exports = {
     isPaused,
 
     isStopped,
+
+
+    /*
+     * Maintenance Mode
+     */
+
+    syncMaintenanceMode,
+
+    isMaintenanceHold,
 
 };

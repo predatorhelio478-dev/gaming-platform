@@ -28,6 +28,25 @@ const seedSettings = async () => {
             key: "two_factor_enabled",
         });
 
+        // one-time metadata fix for rows seeded before these
+        // flags changed ($setOnInsert above never updates an
+        // existing row). Only the flags - the saved value is
+        // left untouched:
+        //  - debug_mode was isSensitive, which disabled its
+        //    toggle AND made every System-tab save fail
+        //    ("Sensitive setting cannot be updated").
+        //  - maintenance_mode must be public so the frontend
+        //    can render the maintenance page.
+        await Setting.updateOne(
+            { category: "system", key: "debug_mode" },
+            { $set: { isSensitive: false } }
+        );
+
+        await Setting.updateOne(
+            { category: "system", key: "maintenance_mode" },
+            { $set: { isPublic: true } }
+        );
+
         console.log("Settings seeded successfully.");
     } catch (error) {
         console.error(

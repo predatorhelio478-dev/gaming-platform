@@ -10,6 +10,19 @@ const notificationService =
     require("../services/notificationService");
 
 
+// The profile shape returned by GET/PATCH /users/me.
+const toProfileResponse = (user) => ({
+    _id: user._id,
+    fullName: user.fullName,
+    username: user.username,
+    email: user.email,
+    mobile: user.mobile,
+    emailVerified: user.emailVerified,
+    mobileVerified: user.mobileVerified,
+    notificationPreferences: user.notificationPreferences,
+});
+
+
 const getRequestContext = (req) => ({
 
     ipAddress:
@@ -34,6 +47,46 @@ const getRequestContext = (req) => ({
 // /users/me/mobile/change flows, username is permanently
 // immutable, and everything else is admin-only.
 // ==========================================================
+
+// Fresh profile (incl. notificationPreferences) straight from
+// the DB - the Settings page reads this rather than trusting the
+// copy cached in the browser at login, which may be stale.
+const getMyProfile = async (req, res) => {
+
+    try {
+
+        const user =
+            await User.findById(req.user._id);
+
+        if (!user) {
+
+            return res.status(404).json({
+                success: false,
+                message: "User not found.",
+            });
+
+        }
+
+        return res.status(200).json({
+            success: true,
+            user: toProfileResponse(user),
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Get My Profile Error:",
+            error.message
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Unable to load profile.",
+        });
+
+    }
+
+};
 
 const updateMyProfile = async (req, res) => {
 
@@ -98,16 +151,7 @@ const updateMyProfile = async (req, res) => {
         return res.status(200).json({
             success: true,
             message: "Profile updated.",
-            user: {
-                _id: user._id,
-                fullName: user.fullName,
-                username: user.username,
-                email: user.email,
-                mobile: user.mobile,
-                emailVerified: user.emailVerified,
-                mobileVerified: user.mobileVerified,
-                notificationPreferences: user.notificationPreferences,
-            },
+            user: toProfileResponse(user),
         });
 
     } catch (error) {
@@ -396,6 +440,7 @@ const changeMyPassword = async (req, res) => {
 
 
 module.exports = {
+    getMyProfile,
     updateMyProfile,
     requestEmailChange,
     requestMobileChange,

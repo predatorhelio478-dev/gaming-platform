@@ -10,6 +10,9 @@ const walletService =
 const settingsService =
     require("./settingsService");
 
+const verificationPolicy =
+    require("./verificationPolicy");
+
 const {
     isRazorpayXConfigured,
     getRazorpayXClient,
@@ -80,7 +83,32 @@ const createWithdrawalRequest = async (
 
     }
 
-    if (!user.emailVerified) {
+    // Each channel is gated independently by its own admin
+    // setting (Settings -> User). Toggling a setting only
+    // changes whether that channel is REQUIRED here - it never
+    // touches the user's stored emailVerified/mobileVerified.
+    const missingVerifications =
+        verificationPolicy.getMissingVerifications(
+            user,
+            await verificationPolicy.getVerificationRequirements()
+        );
+
+    const emailMissing =
+        missingVerifications.includes("email");
+
+    const mobileMissing =
+        missingVerifications.includes("mobile");
+
+    if (emailMissing && mobileMissing) {
+
+        throw Object.assign(
+            new Error("Please verify your email and mobile number before withdrawing."),
+            { code: "EMAIL_AND_MOBILE_NOT_VERIFIED" }
+        );
+
+    }
+
+    if (emailMissing) {
 
         throw Object.assign(
             new Error("Please verify your email before withdrawing."),
@@ -89,7 +117,7 @@ const createWithdrawalRequest = async (
 
     }
 
-    if (!user.mobileVerified) {
+    if (mobileMissing) {
 
         throw Object.assign(
             new Error("Please verify your mobile number before withdrawing."),

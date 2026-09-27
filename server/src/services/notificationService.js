@@ -56,7 +56,26 @@ const emit = (room, event, payload) => {
 // global admin setting AND the user's own opt-out)
 // ==========================================================
 
-const sendSideChannel = async (user, title, message) => {
+// Whether a notification-type email may be sent to this user:
+// the global admin switch AND the user's own Email
+// Notifications preference. Security/account emails (OTP,
+// password reset, admin changes to their contact details or
+// verification) deliberately don't go through this.
+const canEmailUser = async (user) => {
+
+    if (!user?.email || user?.notificationPreferences?.email === false) {
+
+        return false;
+
+    }
+
+    return (
+        await settingsService.getValue("notification", "email_enabled", true)
+    ) === true;
+
+};
+
+const sendSideChannel = async (user, title, message, options = {}) => {
 
     try {
 
@@ -66,6 +85,7 @@ const sendSideChannel = async (user, title, message) => {
         ]);
 
         if (
+            !options.skipEmail &&
             emailEnabled &&
             user?.notificationPreferences?.email !== false &&
             user?.email
@@ -117,12 +137,16 @@ const sendSideChannel = async (user, title, message) => {
 // failure break the caller's primary flow.
 // ==========================================================
 
+// options.skipEmail - the caller sends its own, richer email
+// for this event (still gated by canEmailUser), so the generic
+// side-channel email would be a duplicate.
 const notify = async (
     userId,
     type,
     title,
     message,
-    data = {}
+    data = {},
+    options = {}
 ) => {
 
     try {
@@ -166,7 +190,7 @@ const notify = async (
 
         if (user) {
 
-            sendSideChannel(user, title, message).catch(() => {});
+            sendSideChannel(user, title, message, options).catch(() => {});
 
         }
 
@@ -397,6 +421,7 @@ const getUnreadCount = async (
 
 
 module.exports = {
+    canEmailUser,
     notify,
     notifyAdmins,
     listMyNotifications,

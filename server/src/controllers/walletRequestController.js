@@ -125,7 +125,10 @@ const verifyRazorpayPayment = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: "Payment verified. Your wallet has been credited.",
+            message:
+                request.creditedTo === "testBalance"
+                    ? "Test payment verified. Your Test Balance has been credited."
+                    : "Payment verified. Your wallet has been credited.",
             data: request,
         });
 

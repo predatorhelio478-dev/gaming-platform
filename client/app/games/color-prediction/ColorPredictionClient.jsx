@@ -1840,10 +1840,14 @@ export default function ColorPredictionPage() {
 
                 }
 
+                // endTime is pushed forward by any admin pause /
+                // maintenance time (round.pausedMs) - excluded
+                // so the ring keeps the real round length.
                 const seconds =
                     (
                         new Date(round.endTime).getTime() -
-                        new Date(round.startTime).getTime()
+                        new Date(round.startTime).getTime() -
+                        (Number(round.pausedMs) || 0)
                     ) / 1000;
 
                 return Number.isFinite(seconds) && seconds > 0

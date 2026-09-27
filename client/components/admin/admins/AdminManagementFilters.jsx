@@ -16,7 +16,7 @@ import AdminDropdown from "../ui/AdminDropdown";
 export default function AdminManagementFilters({
     search = "",
     setSearch,
-    status = "all",
+    status = "active",
     setStatus,
     role = "all",
     setRole,
@@ -31,7 +31,7 @@ export default function AdminManagementFilters({
         Boolean(
             String(search).trim()
         ) ||
-        status !== "all" ||
+        status !== "active" ||
         role !== "all";
 
 
@@ -43,7 +43,7 @@ export default function AdminManagementFilters({
 
         {
             value: "all",
-            label: "All Status",
+            label: "All (incl. deactivated)",
         },
 
         {
@@ -384,7 +384,7 @@ export default function AdminManagementFilters({
 
                     {/* STATUS */}
 
-                    {status !== "all" && (
+                    {status !== "active" && (
 
                         <FilterTag
                             label={
@@ -394,7 +394,7 @@ export default function AdminManagementFilters({
                             }
                             onRemove={() =>
                                 setStatus?.(
-                                    "all"
+                                    "active"
                                 )
                             }
                         />
