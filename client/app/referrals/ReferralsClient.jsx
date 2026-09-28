@@ -9,7 +9,7 @@ import UserStatCard from "../../components/user/UserStatCard";
 import { LoadingState, ErrorState } from "../../components/user/PageState";
 import Pagination from "../../components/user/Pagination";
 import DataTable, { DataTableRow, DataTableCell } from "../../components/user/DataTable";
-import { getReferralInfo, getReferredUsers } from "../../lib/api";
+import { getReferralInfo, getReferredUsers, getPublicSettings } from "../../lib/api";
 
 // ======================================================
 // REFERRALS PAGE
@@ -30,6 +30,19 @@ export default function ReferralsPage() {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [total, setTotal] = useState(0);
+
+    // Settings -> User -> referral_enabled. The server stops
+    // crediting referral bonuses while this is off; this makes the
+    // page say so. null = not loaded yet.
+    const [referralsEnabled, setReferralsEnabled] = useState(null);
+
+    useEffect(() => {
+        getPublicSettings()
+            .then((response) => {
+                setReferralsEnabled(response?.data?.user?.referral_enabled !== false);
+            })
+            .catch(() => {});
+    }, []);
 
     const loadInfo = useCallback(async () => {
         try {
@@ -106,6 +119,12 @@ export default function ReferralsPage() {
                 />
 
               <div className="mx-auto max-w-3xl">
+
+                {referralsEnabled === false && (
+                    <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                        The referral program is currently paused - referral bonuses are not being credited right now.
+                    </div>
+                )}
 
                 <div>
                     {loading ? (

@@ -17,6 +17,7 @@ import {
     getGameHistoryPaginated,
     placeBet,
     increaseBet,
+    getPublicSettings,
 } from "../../../lib/api";
 
 import FullHistoryModal
@@ -2282,6 +2283,32 @@ export default function ColorPredictionPage() {
 
 
     // ======================================================
+    // GAMES ENABLED (Settings -> Game -> games_enabled)
+    // ======================================================
+    //
+    // The server already rejects bets (and increases) while games
+    // are disabled; this makes the page say so instead of showing
+    // "Betting Open". Fetched directly (not via useSiteSettings,
+    // whose per-session cache would miss admin changes).
+
+    const [gamesEnabled, setGamesEnabled] =
+        useState(null);
+
+    useEffect(() => {
+
+        getPublicSettings()
+            .then((response) => {
+                setGamesEnabled(response?.data?.game?.games_enabled !== false);
+            })
+            .catch(() => {});
+
+    }, []);
+
+    const gamesDisabled =
+        gamesEnabled === false;
+
+
+    // ======================================================
     // DISABLED STATE
     // ======================================================
 
@@ -2290,6 +2317,7 @@ export default function ColorPredictionPage() {
         placingBet ||
         gamePaused ||
         gameStopped ||
+        gamesDisabled ||
         (
             betPlaced &&
             !canIncreaseBet
@@ -2380,7 +2408,9 @@ export default function ColorPredictionPage() {
 
 
     const statusTone =
-        gameStopped
+        gamesDisabled
+            ? "disabled"
+            : gameStopped
             ? "stopped"
             : gamePaused
                 ? "paused"
@@ -2389,6 +2419,7 @@ export default function ColorPredictionPage() {
                     : "closed";
 
     const statusLabel = {
+        disabled: "Games Disabled",
         stopped: "Game Stopped",
         paused: "Betting Paused",
         open: "Betting Open",
@@ -2396,6 +2427,7 @@ export default function ColorPredictionPage() {
     }[statusTone];
 
     const statusClasses = {
+        disabled: "border-red-500/40 bg-red-500/15 text-red-300",
         stopped: "border-red-500/40 bg-red-500/15 text-red-300",
         paused: "border-yellow-500/40 bg-yellow-500/15 text-yellow-300",
         open: "border-emerald-400/40 bg-emerald-500/15 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.25)]",
@@ -2403,6 +2435,7 @@ export default function ColorPredictionPage() {
     }[statusTone];
 
     const statusDot = {
+        disabled: "bg-red-400",
         stopped: "bg-red-400",
         paused: "bg-yellow-400",
         open: "bg-emerald-400",
@@ -2427,7 +2460,8 @@ export default function ColorPredictionPage() {
         placingBet ||
         activeBalance <= 0 ||
         gamePaused ||
-        gameStopped;
+        gameStopped ||
+        gamesDisabled;
 
 
     // ======================================================
@@ -2713,6 +2747,13 @@ export default function ColorPredictionPage() {
                                 </div>
 
                             </div>
+
+
+                            {gamesDisabled && (
+                                <div className="relative mt-6 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-center text-sm font-semibold text-red-300">
+                                    Games are currently disabled. Betting is unavailable right now.
+                                </div>
+                            )}
 
 
                             {/* =================================================
@@ -3127,7 +3168,8 @@ export default function ColorPredictionPage() {
                                                     !amount ||
                                                     placingBet ||
                                                     gamePaused ||
-                                                    gameStopped
+                                                    gameStopped ||
+                                                    gamesDisabled
                                                 )
                                         )
                                     }

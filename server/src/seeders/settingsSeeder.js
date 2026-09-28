@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const Setting = require("../models/Setting");
+const settingsCache = require("../services/settingsCache");
 const defaultSettings = require("../config/defaultSettings");
 
 const seedSettings = async () => {
@@ -121,6 +122,12 @@ const seedSettings = async () => {
                 );
             }
         }
+
+        // The HTTP server starts listening before seeding finishes,
+        // so a request in that window can cache the pre-seed
+        // (possibly empty) settings for the full cache TTL. Drop
+        // that cache so the next read sees the seeded values.
+        settingsCache.invalidate();
 
         console.log("Settings seeded successfully.");
     } catch (error) {

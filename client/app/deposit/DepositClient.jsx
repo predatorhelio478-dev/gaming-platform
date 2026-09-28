@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Script from "next/script";
-import { ArrowDownToLine, Zap } from "lucide-react";
+import { ArrowDownToLine, Info, Zap } from "lucide-react";
 
 import UserLayout from "../../components/user/UserLayout";
 import UserPageHeader from "../../components/user/UserPageHeader";
@@ -123,6 +123,19 @@ export default function DepositPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [statusFilter, methodFilter, search, dateFrom, dateTo]);
 
+    // Manual-deposit contact note: shown only once settings have
+    // actually confirmed manual mode (paymentMode defaults to
+    // "manual" before they load, so it would otherwise flash for
+    // sites using automatic deposits).
+    const [manualModeConfirmed, setManualModeConfirmed] = useState(false);
+    const [supportEmail, setSupportEmail] = useState("");
+
+    // Settings -> Payment -> deposit_enabled. The server already
+    // rejects every deposit path while this is off; this only
+    // makes the page say so instead of showing a form that will
+    // fail. null = not loaded yet (form shown, as before).
+    const [depositsEnabled, setDepositsEnabled] = useState(null);
+
     useEffect(() => {
         getPublicSettings()
             .then((response) => {
@@ -130,6 +143,9 @@ export default function DepositPage() {
                 if (mode === "automatic") {
                     setPaymentMode("automatic");
                 }
+                setManualModeConfirmed(mode !== "automatic");
+                setDepositsEnabled(response?.data?.payment?.deposit_enabled !== false);
+                setSupportEmail(String(response?.data?.general?.support_email || "").trim());
             })
             .catch(() => {});
     }, []);
@@ -301,7 +317,19 @@ export default function DepositPage() {
                     />
                 )}
 
-                {paymentMode === "automatic" ? (
+                {depositsEnabled === false ? (
+
+                    <div
+                        role="note"
+                        className="mt-6 flex items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3.5 sm:px-5"
+                    >
+                        <Info size={18} className="mt-0.5 shrink-0 text-amber-300" />
+                        <p className="text-sm leading-6 text-amber-200">
+                            Deposits are currently disabled. Please check back later or contact Support if you need help.
+                        </p>
+                    </div>
+
+                ) : paymentMode === "automatic" ? (
 
                     <div className="mt-6 space-y-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
 
@@ -348,9 +376,41 @@ export default function DepositPage() {
 
                 ) : (
 
+                    <>
+
+                    {manualModeConfirmed && depositsEnabled === true && (
+                        <div
+                            role="note"
+                            className="mt-6 flex items-start gap-3 rounded-2xl border border-violet-500/25 bg-violet-500/[0.08] px-4 py-3.5 sm:px-5"
+                        >
+                            <Info size={18} className="mt-0.5 shrink-0 text-violet-300" />
+                            <p className="text-sm leading-6 text-slate-200">
+                                Manual deposits are currently enabled. To add funds to your account, please contact us at{" "}
+                                {supportEmail ? (
+                                    <a
+                                        href={`mailto:${supportEmail}`}
+                                        className="font-semibold text-violet-300 underline-offset-2 [overflow-wrap:anywhere] hover:underline"
+                                    >
+                                        {supportEmail}
+                                    </a>
+                                ) : (
+                                    // No support email configured yet - point to
+                                    // the support ticket page instead of a blank.
+                                    <a
+                                        href="/support"
+                                        className="font-semibold text-violet-300 underline-offset-2 hover:underline"
+                                    >
+                                        our Support team
+                                    </a>
+                                )}
+                                .
+                            </p>
+                        </div>
+                    )}
+
                     <form
                         onSubmit={handleManualSubmit}
-                        className="mt-6 space-y-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5"
+                        className={`${manualModeConfirmed ? "mt-4" : "mt-6"} space-y-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5`}
                     >
 
                         {formError && (
@@ -416,6 +476,8 @@ export default function DepositPage() {
                         </button>
 
                     </form>
+
+                    </>
 
                 )}
 

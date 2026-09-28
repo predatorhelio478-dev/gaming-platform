@@ -1,10 +1,10 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { UserPlus, ShieldCheck } from "lucide-react";
 
-import { registerUser, verifyOtp, requestOtp } from "../../lib/api";
+import { registerUser, verifyOtp, requestOtp, getPublicSettings } from "../../lib/api";
 import { setAuthSession } from "../../lib/useAuth";
 import GuestOnly from "../../components/auth/GuestOnly";
 import AuthShell, { SecurityNote } from "../../components/auth/AuthShell";
@@ -49,6 +49,19 @@ function RegisterForm() {
     const [error, setError] = useState("");
 
     const [success, setSuccess] = useState("");
+
+    // Settings -> User -> registration_enabled. The server already
+    // rejects sign-ups while this is off; this makes the page say
+    // so up front. null = not loaded yet (form usable, as before).
+    const [registrationEnabled, setRegistrationEnabled] = useState(null);
+
+    useEffect(() => {
+        getPublicSettings()
+            .then((response) => {
+                setRegistrationEnabled(response?.data?.user?.registration_enabled !== false);
+            })
+            .catch(() => {});
+    }, []);
 
     const registerLimiter = useRateLimitCountdown("register_rate_limit");
 
@@ -378,6 +391,12 @@ function RegisterForm() {
                 }
             >
 
+                {registrationEnabled === false && (
+                    <div className="mb-5 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                        New registrations are currently disabled. Please check back later.
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="space-y-5">
 
                     {/* FULL NAME + USERNAME (side-by-side on sm+) */}
@@ -501,7 +520,7 @@ function RegisterForm() {
 
                     <button
                         type="submit"
-                        disabled={loading || registerLimiter.active}
+                        disabled={loading || registerLimiter.active || registrationEnabled === false}
                         className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-purple-900/20 transition hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {registerLimiter.active

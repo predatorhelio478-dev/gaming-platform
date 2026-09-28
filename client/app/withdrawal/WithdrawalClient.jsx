@@ -40,6 +40,11 @@ export default function WithdrawalPage() {
     const [user, setUser] = useState(null);
     const [verificationRequired, setVerificationRequired] = useState(null);
 
+    // Settings -> Payment -> withdrawal_enabled. The server already
+    // rejects requests while this is off; this makes the page say
+    // so. null = not loaded yet (form usable, as before).
+    const [withdrawalsEnabled, setWithdrawalsEnabled] = useState(null);
+
     const [amount, setAmount] = useState("");
     const [payoutMethod, setPayoutMethod] = useState("bank_transfer");
     const [payoutDetails, setPayoutDetails] = useState("");
@@ -133,6 +138,7 @@ export default function WithdrawalPage() {
         getPublicSettings()
             .then((response) => {
                 setFeeRules(getWithdrawalFeeRules(response?.data?.payment));
+                setWithdrawalsEnabled(response?.data?.payment?.withdrawal_enabled !== false);
                 const mode = response?.data?.payment?.withdrawal_mode;
                 if (mode === "automatic") {
                     setWithdrawalMode("automatic");
@@ -293,6 +299,12 @@ export default function WithdrawalPage() {
                 />
 
               <div className="mx-auto max-w-3xl">
+
+                {withdrawalsEnabled === false && (
+                    <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                        Withdrawals are currently disabled. Please check back later or contact Support if you need help.
+                    </div>
+                )}
 
                 {missingVerification.length > 0 && (
                     <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
@@ -472,7 +484,7 @@ export default function WithdrawalPage() {
 
                     <button
                         type="submit"
-                        disabled={submitting || missingVerification.length > 0 || (amountIsValid && !activeFeeQuote)}
+                        disabled={submitting || withdrawalsEnabled === false || missingVerification.length > 0 || (amountIsValid && !activeFeeQuote)}
                         className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <ArrowUpFromLine size={16} />
