@@ -1,3 +1,8 @@
+const {
+    TERMS_AND_CONDITIONS,
+    PRIVACY_POLICY,
+} = require("./legalDocuments");
+
 const defaultSettings = [
 
     // =========================================================
@@ -164,6 +169,87 @@ const defaultSettings = [
 
     {
         category: "payment",
+        key: "withdrawal_fee_enabled",
+        value: true,
+        type: "boolean",
+        description: "Charge a withdrawal fee (deducted from the payout amount) using the tiers below",
+        isPublic: true,
+    },
+
+    {
+        category: "payment",
+        key: "withdrawal_fee_daily_cumulative",
+        value: true,
+        type: "boolean",
+        description: "Daily rule: ON = the fee tier is chosen by the user's total withdrawals for the current day (site timezone) including this one; OFF = by this withdrawal's amount alone. The tier's percentage always applies to this withdrawal's amount",
+        isPublic: true,
+    },
+
+    {
+        category: "payment",
+        key: "withdrawal_fee_tier1_max",
+        value: 1000,
+        type: "number",
+        description: "Fee tier 1 upper limit (INR, inclusive) - amounts up to this use the tier 1 fee",
+        isPublic: true,
+    },
+
+    {
+        category: "payment",
+        key: "withdrawal_fee_tier2_max",
+        value: 5000,
+        type: "number",
+        description: "Fee tier 2 upper limit (INR, inclusive) - above tier 1, up to this, use the tier 2 fee",
+        isPublic: true,
+    },
+
+    {
+        category: "payment",
+        key: "withdrawal_fee_tier3_max",
+        value: 10000,
+        type: "number",
+        description: "Fee tier 3 upper limit (INR, inclusive) - above tier 2, up to this, use the tier 3 fee; anything above uses the tier 4 fee",
+        isPublic: true,
+    },
+
+    {
+        category: "payment",
+        key: "withdrawal_fee_tier1_percent",
+        value: 0,
+        type: "number",
+        description: "Tier 1 withdrawal fee (%)",
+        isPublic: true,
+    },
+
+    {
+        category: "payment",
+        key: "withdrawal_fee_tier2_percent",
+        value: 1,
+        type: "number",
+        description: "Tier 2 withdrawal fee (%)",
+        isPublic: true,
+    },
+
+    {
+        category: "payment",
+        key: "withdrawal_fee_tier3_percent",
+        value: 1.5,
+        type: "number",
+        description: "Tier 3 withdrawal fee (%)",
+        isPublic: true,
+    },
+
+    {
+        category: "payment",
+        key: "withdrawal_fee_tier4_percent",
+        value: 2,
+        type: "number",
+        description: "Tier 4 withdrawal fee (%) - above the tier 3 upper limit",
+        isPublic: true,
+    },
+
+    {
+        category: "payment",
         key: "razorpay_mode",
         value: "test",
         type: "string",
@@ -219,6 +305,15 @@ const defaultSettings = [
         type: "number",
         description: "Multiplier applied to a winning bet's stake to compute its payout",
         isPublic: true,
+    },
+
+    {
+        category: "game",
+        key: "lowest_bet_wins",
+        value: true,
+        type: "boolean",
+        description: "ON: the color with the lowest total bet wins each round. OFF: the winning color is chosen at random",
+        isPublic: false,
     },
 
 
@@ -379,7 +474,7 @@ const defaultSettings = [
     {
         category: "legal",
         key: "terms_and_conditions",
-        value: "",
+        value: TERMS_AND_CONDITIONS,
         type: "string",
         description: "Terms and conditions content",
         isPublic: true,
@@ -388,7 +483,7 @@ const defaultSettings = [
     {
         category: "legal",
         key: "privacy_policy",
-        value: "",
+        value: PRIVACY_POLICY,
         type: "string",
         description: "Privacy policy content",
         isPublic: true,

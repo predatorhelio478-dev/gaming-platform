@@ -10,7 +10,8 @@ import { LoadingState, ErrorState } from "../../components/user/PageState";
 import StatusBadge from "../../components/user/StatusBadge";
 import Pagination from "../../components/user/Pagination";
 import DataTable, { DataTableRow, DataTableCell } from "../../components/user/DataTable";
-import { createWithdrawalRequest, getMyWithdrawalRequests, getPublicSettings } from "../../lib/api";
+import { createWithdrawalRequest, getMyWithdrawalRequests, getPublicSettings, getWithdrawalFeePreview } from "../../lib/api";
+import { getWithdrawalFeeRules, formatInr } from "../../lib/withdrawalFees";
 import { getStoredUser } from "../../lib/useAuth";
 import useWallet from "../../lib/useWallet";
 
@@ -47,6 +48,14 @@ export default function WithdrawalPage() {
     const [bankIfsc, setBankIfsc] = useState("");
 
     const [submitting, setSubmitting] = useState(false);
+
+    // Withdrawal fee: rules (display) + the server's quote for
+    // the current amount. The quote is what gets confirmed - the
+    // server recalculates on submit and rejects if it differs.
+    const [feeRules, setFeeRules] = useState(() => getWithdrawalFeeRules(null));
+    const [feeQuote, setFeeQuote] = useState(null);
+    const [feeQuoteError, setFeeQuoteError] = useState("");
+    const feeRequestId = useRef(0);
     const [formMessage, setFormMessage] = useState("");
     const [formError, setFormError] = useState("");
 
@@ -123,6 +132,7 @@ export default function WithdrawalPage() {
 
         getPublicSettings()
             .then((response) => {
+                setFeeRules(getWithdrawalFeeRules(response?.data?.payment));
                 const mode = response?.data?.payment?.withdrawal_mode;
                 if (mode === "automatic") {
                     setWithdrawalMode("automatic");
@@ -148,6 +158,45 @@ export default function WithdrawalPage() {
         ].filter(Boolean)
         : [];
 
+    // ==================================================
+    // FEE QUOTE (debounced, server-calculated)
+    // ==================================================
+
+    const numericAmountInput = Number(amount);
+    const amountIsValid = Number.isFinite(numericAmountInput) && numericAmountInput > 0;
+
+    // Only a quote for exactly the amount on screen is shown or
+    // confirmed - never a stale one from before an edit.
+    const activeFeeQuote =
+        feeQuote && amountIsValid && feeQuote.amount === Math.round(numericAmountInput * 100) / 100
+            ? feeQuote
+            : null;
+
+    const loadFeeQuote = useCallback(async (value) => {
+        const requestId = ++feeRequestId.current;
+        try {
+            const response = await getWithdrawalFeePreview(value);
+            if (requestId === feeRequestId.current) {
+                setFeeQuote(response?.data || null);
+                setFeeQuoteError("");
+            }
+        } catch (err) {
+            if (requestId === feeRequestId.current) {
+                setFeeQuote(null);
+                setFeeQuoteError(err.message || "Unable to calculate the withdrawal fee.");
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!amountIsValid) {
+            feeRequestId.current += 1; // drop any in-flight quote
+            return;
+        }
+        const timeout = setTimeout(() => loadFeeQuote(numericAmountInput), 350);
+        return () => clearTimeout(timeout);
+    }, [amountIsValid, numericAmountInput, loadFeeQuote]);
+
     const handleSubmit = async (event) => {
         event.preventDefault();
 
@@ -163,6 +212,11 @@ export default function WithdrawalPage() {
 
         if (!payoutDetails.trim()) {
             setFormError("Payout details (bank/UPI) are required.");
+            return;
+        }
+
+        if (!activeFeeQuote) {
+            setFormError("Please wait for the withdrawal fee to be calculated, then confirm.");
             return;
         }
 
@@ -185,6 +239,9 @@ export default function WithdrawalPage() {
 
             const response = await createWithdrawalRequest({
                 amount: numericAmount,
+                // The fee shown below - the server only compares it
+                // to its own calculation and never charges this value.
+                expectedFee: activeFeeQuote.feeAmount,
                 payoutMethod,
                 payoutDetails: payoutDetails.trim(),
                 ...(withdrawalMode === "automatic" && payoutMethod === "upi"
@@ -206,6 +263,10 @@ export default function WithdrawalPage() {
             await loadRequests(1);
             wallet.refresh();
         } catch (err) {
+            if (err?.data?.code === "WITHDRAWAL_FEE_CHANGED" && err.data.feeQuote) {
+                // Show the new server quote so the user can review it.
+                setFeeQuote(err.data.feeQuote);
+            }
             setFormError(err.message || "Unable to submit withdrawal request.");
         } finally {
             setSubmitting(false);
@@ -341,9 +402,77 @@ export default function WithdrawalPage() {
                         </div>
                     )}
 
+                    {/* WITHDRAWAL FEE SUMMARY */}
+
+                    <div className="rounded-xl border border-white/[0.06] bg-[#050a19] p-4">
+
+                        <p className="text-sm font-semibold text-slate-200">Withdrawal summary</p>
+
+                        <dl className="mt-3 space-y-2 text-sm">
+                            <div className="flex items-center justify-between gap-3">
+                                <dt className="text-slate-400">Withdrawal amount</dt>
+                                <dd className="font-semibold text-white">
+                                    {amountIsValid ? formatInr(numericAmountInput) : "-"}
+                                </dd>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                                <dt className="text-slate-400">
+                                    Withdrawal fee
+                                    {activeFeeQuote?.enabled && (
+                                        <span className="text-slate-500"> ({activeFeeQuote.feePercent}%)</span>
+                                    )}
+                                </dt>
+                                <dd className="font-semibold text-amber-300">
+                                    {!amountIsValid
+                                        ? "-"
+                                        : activeFeeQuote
+                                            ? formatInr(activeFeeQuote.feeAmount)
+                                            : feeQuoteError
+                                                ? "Unavailable"
+                                                : "Calculating..."}
+                                </dd>
+                            </div>
+                            <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-2">
+                                <dt className="font-semibold text-slate-200">You will receive</dt>
+                                <dd className="text-base font-bold text-emerald-400">
+                                    {activeFeeQuote ? formatInr(activeFeeQuote.netAmount) : "-"}
+                                </dd>
+                            </div>
+                        </dl>
+
+                        {activeFeeQuote?.enabled && activeFeeQuote.dailyCumulative && activeFeeQuote.dailyTotalBefore > 0 && (
+                            <p className="mt-2 text-[12px] text-slate-400">
+                                Includes {formatInr(activeFeeQuote.dailyTotalBefore)} already withdrawn today - fee tier based on a daily total of {formatInr(activeFeeQuote.tierBasisAmount)}.
+                            </p>
+                        )}
+
+                        {feeQuoteError && amountIsValid && (
+                            <p className="mt-2 text-[12px] text-red-400">{feeQuoteError}</p>
+                        )}
+
+                        <div className="mt-3 border-t border-white/[0.06] pt-3 text-[12px] leading-5 text-slate-400">
+                            {feeRules.enabled ? (
+                                <>
+                                    <p className="font-medium text-slate-300">Withdrawal fees</p>
+                                    <ul className="mt-1 grid gap-x-4 sm:grid-cols-2">
+                                        {feeRules.tiers.map((tier) => (
+                                            <li key={tier.label}>
+                                                {tier.label}: <span className="text-slate-200">{tier.percent}%</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    <p className="mt-1">{feeRules.basisText} {feeRules.deductionText}</p>
+                                </>
+                            ) : (
+                                <p>No withdrawal fee is currently charged.</p>
+                            )}
+                        </div>
+
+                    </div>
+
                     <button
                         type="submit"
-                        disabled={submitting || missingVerification.length > 0}
+                        disabled={submitting || missingVerification.length > 0 || (amountIsValid && !activeFeeQuote)}
                         className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <ArrowUpFromLine size={16} />
@@ -394,16 +523,25 @@ export default function WithdrawalPage() {
                         title="Withdrawal Requests"
                         subtitle="Your Withdrawals"
                         count={requests.length}
-                        minWidth="900px"
+                        minWidth="1100px"
                         empty={requests.length === 0}
                         emptyTitle="No withdrawals yet"
                         emptyMessage="You haven't submitted any withdrawal requests yet."
-                        headers={["Amount", "Method", "Details", "Mode", "Status", "Date"]}
+                        headers={["Amount", "Fee", "You Receive", "Method", "Details", "Mode", "Status", "Date"]}
                     >
                         {requests.map((request) => (
                             <DataTableRow key={request._id}>
                                 <DataTableCell className="font-semibold text-white">
                                     ₹{Number(request.amount).toLocaleString("en-IN")}
+                                </DataTableCell>
+                                <DataTableCell className="text-amber-300">
+                                    {formatInr(request.feeAmount || 0)}
+                                    {request.feeAmount > 0 && (
+                                        <span className="text-slate-500"> ({request.feePercent}%)</span>
+                                    )}
+                                </DataTableCell>
+                                <DataTableCell className="font-semibold text-emerald-400">
+                                    {formatInr(Number.isFinite(request.netAmount) ? request.netAmount : request.amount)}
                                 </DataTableCell>
                                 <DataTableCell className="text-slate-400">{request.payoutMethod}</DataTableCell>
                                 <DataTableCell className="text-slate-400">{request.payoutDetails}</DataTableCell>

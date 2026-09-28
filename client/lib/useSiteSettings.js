@@ -11,6 +11,7 @@ let cachedPromise = null;
 const DEFAULTS = {
     siteName: "Gamzzones",
     siteDescription: "Gaming Platform",
+    payoutMultiplier: 2,
 };
 
 const fetchSiteSettings = () => {
@@ -22,9 +23,12 @@ const fetchSiteSettings = () => {
 
                 const general = response?.data?.general || {};
 
+                const game = response?.data?.game || {};
+
                 return {
                     siteName: general.site_name || DEFAULTS.siteName,
                     siteDescription: general.site_description || DEFAULTS.siteDescription,
+                    payoutMultiplier: Number(game.payout_multiplier) || DEFAULTS.payoutMultiplier,
                 };
 
             })

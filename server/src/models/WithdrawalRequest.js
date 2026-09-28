@@ -140,6 +140,40 @@ const withdrawalRequestSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.Mixed,
             default: null,
         },
+
+        // ==================================================
+        // WITHDRAWAL FEE (server-calculated at request time -
+        // see services/withdrawalFeeService.js)
+        // ==================================================
+        //
+        // `amount` stays the GROSS amount held/debited from the
+        // wallet. The fee is not a separate debit: it's simply
+        // not paid out, so the payout is `netAmount`
+        // (amount - feeAmount). Requests created before fees
+        // existed have feeAmount 0 and no netAmount - treat
+        // their payout as `amount`.
+        feeAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+
+        feePercent: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+
+        netAmount: {
+            type: Number,
+            min: 0,
+        },
+
+        // Snapshot of how the fee was derived, for audit/history.
+        feeDetails: {
+            type: mongoose.Schema.Types.Mixed,
+            default: null,
+        },
     },
     {
         timestamps: true,

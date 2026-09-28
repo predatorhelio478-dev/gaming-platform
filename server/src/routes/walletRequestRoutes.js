@@ -18,6 +18,7 @@ const {
     getMyDepositRequests,
     createWithdrawalRequest,
     getMyWithdrawalRequests,
+    getWithdrawalFeePreview,
 } = require("../controllers/walletRequestController");
 
 router.use(auth);
@@ -56,6 +57,12 @@ router.post(
 router.get(
     "/withdrawal-requests",
     getMyWithdrawalRequests
+);
+
+// Same calculation the create endpoint charges.
+router.get(
+    "/withdrawal-requests/fee-preview",
+    getWithdrawalFeePreview
 );
 
 module.exports = router;

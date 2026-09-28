@@ -250,7 +250,19 @@ export default function WalletRequestsPage() {
                                             <td className="px-4 py-3 text-slate-300">
                                                 {request.user?.fullName || request.user?.username || "—"}
                                             </td>
-                                            <td className="px-4 py-3 font-semibold text-white">{formatCurrency(request.amount)}</td>
+                                            <td className="px-4 py-3">
+                                                <div className="font-semibold text-white">{formatCurrency(request.amount)}</div>
+                                                {/* Fee is taken from the payout - pay out the NET amount.
+                                                    Pre-fee requests have no netAmount: pay the full amount. */}
+                                                {request.feeAmount > 0 && (
+                                                    <div className="mt-0.5 text-[12px] text-amber-300">
+                                                        Fee {formatCurrency(request.feeAmount)} ({request.feePercent}%)
+                                                    </div>
+                                                )}
+                                                <div className="mt-0.5 whitespace-nowrap text-[12px] font-semibold text-emerald-400">
+                                                    Pay out {formatCurrency(Number.isFinite(request.netAmount) ? request.netAmount : request.amount)}
+                                                </div>
+                                            </td>
                                             <td className="px-4 py-3 text-slate-400">
                                                 {request.payoutMethod}
                                                 <div className="mt-0.5 max-w-[170px] truncate text-[12px] text-slate-500">{request.payoutDetails}</div>

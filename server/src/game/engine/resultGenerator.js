@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 const COLORS = ["red", "green", "blue"];
 
 
@@ -21,16 +23,37 @@ const COLORS = ["red", "green", "blue"];
  * pure/testable and the caller (gameEngine) remains the single
  * place responsible for reading bet data and persisting the
  * result - nothing here ever accepts client/frontend input.
+ *
+ * The lowest-bet rule is controlled by the admin setting
+ * game.lowest_bet_wins (passed in by gameEngine). When it is
+ * OFF, the winner is a uniformly random color that ignores the
+ * bet totals entirely.
  * ==========================================
  */
 
-const generateResult = (colorTotals = {}) => {
+const generateResult = (
+    colorTotals = {},
+    { lowestBetWins = true } = {}
+) => {
 
     const totals = {
         red: Number(colorTotals.red) || 0,
         green: Number(colorTotals.green) || 0,
         blue: Number(colorTotals.blue) || 0,
     };
+
+
+    if (!lowestBetWins) {
+
+        return {
+            result: COLORS[crypto.randomInt(COLORS.length)],
+            colorTotals: totals,
+            lowestAmount: null,
+            tiedColors: [],
+            mode: "random",
+        };
+
+    }
 
     const lowestAmount =
         Math.min(
@@ -58,6 +81,7 @@ const generateResult = (colorTotals = {}) => {
         colorTotals: totals,
         lowestAmount,
         tiedColors,
+        mode: "lowest_bet",
     };
 
 };

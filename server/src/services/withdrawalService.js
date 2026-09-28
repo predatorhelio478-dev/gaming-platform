@@ -25,8 +25,26 @@ const { createAuditLog } =
 const notificationService =
     require("./notificationService");
 
+const withdrawalFeeService =
+    require("./withdrawalFeeService");
+
 
 const DEFAULT_MIN_REAL_BALANCE_FOR_WITHDRAWAL = 50;
+
+
+// What actually leaves the platform for a request: the net
+// amount after the withdrawal fee. Requests created before
+// fees existed have no netAmount - their payout is the full
+// amount, exactly as before.
+const getPayoutAmount = (request) =>
+    Number.isFinite(request?.netAmount)
+        ? request.netAmount
+        : request.amount;
+
+const formatInr = (value) =>
+    Number(value || 0).toLocaleString("en-IN", {
+        maximumFractionDigits: 2,
+    });
 
 
 // ==========================================================
@@ -51,7 +69,8 @@ const createWithdrawalRequest = async (
     amount,
     payoutMethod,
     payoutDetails,
-    payoutTarget = {}
+    payoutTarget = {},
+    { expectedFee } = {}
 ) => {
 
     // ======================================================
@@ -278,13 +297,70 @@ const createWithdrawalRequest = async (
     }
 
     // ======================================================
+    // WITHDRAWAL FEE (server-calculated - never trusted from
+    // the client)
+    // ======================================================
+    //
+    // `expectedFee` is the fee the user was shown and
+    // confirmed. It is only compared, never used: if the real
+    // fee differs (settings changed, or another withdrawal
+    // today moved the user into a different tier since the
+    // preview), nothing is held and the user is asked to
+    // review the new quote - so the fee shown always equals
+    // the fee charged.
+
+    const feeQuote =
+        await withdrawalFeeService.calculateWithdrawalFee(
+            userId,
+            numericAmount
+        );
+
+    if (
+        expectedFee !== undefined &&
+        expectedFee !== null &&
+        expectedFee !== ""
+    ) {
+
+        const confirmedFee =
+            Number(expectedFee);
+
+        if (
+            !Number.isFinite(confirmedFee) ||
+            Math.abs(confirmedFee - feeQuote.feeAmount) > 0.004
+        ) {
+
+            throw Object.assign(
+                new Error(
+                    `The withdrawal fee for this amount is now ₹${formatInr(feeQuote.feeAmount)} (you will receive ₹${formatInr(feeQuote.netAmount)}). Please review and confirm again.`
+                ),
+                { code: "WITHDRAWAL_FEE_CHANGED", feeQuote }
+            );
+
+        }
+
+    }
+
+    const hasFee =
+        feeQuote.feeAmount > 0;
+
+    const feeSummary =
+        hasFee
+            ? ` A withdrawal fee of ₹${formatInr(feeQuote.feeAmount)} (${feeQuote.feePercent}%) applies - payout amount ₹${formatInr(feeQuote.netAmount)}.`
+            : "";
+
+    // ======================================================
     // HOLD FUNDS + CREATE REQUEST
     // ======================================================
+    //
+    // The GROSS amount is held, as before. The fee is taken by
+    // paying out only netAmount - never as a second debit.
 
     await walletService.holdForWithdrawal(
         userId,
         numericAmount,
-        "Withdrawal request submitted"
+        hasFee
+            ? `Withdrawal request submitted (fee ₹${formatInr(feeQuote.feeAmount)}, payout ₹${formatInr(feeQuote.netAmount)})`
+            : "Withdrawal request submitted"
     );
 
     let request;
@@ -301,6 +377,16 @@ const createWithdrawalRequest = async (
                 upiId: payoutTarget?.upiId || null,
                 bankAccountNumber: payoutTarget?.bankAccountNumber || null,
                 bankIfsc: payoutTarget?.bankIfsc || null,
+                feeAmount: feeQuote.feeAmount,
+                feePercent: feeQuote.feePercent,
+                netAmount: feeQuote.netAmount,
+                feeDetails: {
+                    enabled: feeQuote.enabled,
+                    dailyCumulative: feeQuote.dailyCumulative,
+                    tier: feeQuote.tier,
+                    tierBasisAmount: feeQuote.tierBasisAmount,
+                    withdrawnTodayBefore: feeQuote.dailyTotalBefore,
+                },
             });
 
     } catch (error) {
@@ -318,12 +404,31 @@ const createWithdrawalRequest = async (
 
     }
 
+    createAuditLog({
+        actorType: "user",
+        actorId: userId,
+        action: "withdrawal.requested",
+        module: "wallet",
+        key: String(request._id),
+        newValue: numericAmount,
+        metadata: {
+            userId: String(userId),
+            amount: numericAmount,
+            feeAmount: feeQuote.feeAmount,
+            feePercent: feeQuote.feePercent,
+            netAmount: feeQuote.netAmount,
+            feeTier: feeQuote.tier,
+            tierBasisAmount: feeQuote.tierBasisAmount,
+            withdrawnTodayBefore: feeQuote.dailyTotalBefore,
+        },
+    }).catch(() => {});
+
     notificationService
         .notify(
             userId,
             "withdrawal",
             "Withdrawal request submitted",
-            `Your withdrawal request for ₹${numericAmount} has been submitted.`,
+            `Your withdrawal request for ₹${numericAmount} has been submitted.${feeSummary}`,
             { withdrawalRequestId: String(request._id) }
         )
         .catch(() => {});
@@ -334,7 +439,7 @@ const createWithdrawalRequest = async (
             .notifyAdmins(
                 "withdrawal",
                 "New withdrawal request",
-                `A withdrawal request for ₹${numericAmount} is awaiting review.`,
+                `A withdrawal request for ₹${numericAmount} is awaiting review.${hasFee ? ` Pay out ₹${formatInr(feeQuote.netAmount)} (after ₹${formatInr(feeQuote.feeAmount)} fee).` : ""}`,
                 { withdrawalRequestId: String(request._id), userId: String(userId) }
             )
             .catch(() => {});
@@ -469,7 +574,10 @@ const initiateRazorpayPayout = async (
                 {
                     account_number: getRazorpayXAccountNumber(),
                     fund_account_id: fundAccountId,
-                    amount: Math.round(request.amount * 100), // paise
+                    // NET of the withdrawal fee (full amount for
+                    // pre-fee requests) - the fee is simply not
+                    // paid out.
+                    amount: Math.round(getPayoutAmount(request) * 100), // paise
                     currency: "INR",
                     mode: request.upiId ? "UPI" : "IMPS",
                     purpose: "payout",
@@ -631,7 +739,7 @@ const finalizeWithdrawalSuccess = async (
             request.user,
             "withdrawal",
             "Withdrawal successful",
-            `Your withdrawal of ₹${request.amount} has been processed successfully.`,
+            `Your withdrawal of ₹${request.amount} has been processed successfully.${request.feeAmount > 0 ? ` ₹${formatInr(getPayoutAmount(request))} was paid out after a ₹${formatInr(request.feeAmount)} withdrawal fee.` : ""}`,
             { withdrawalRequestId: String(request._id) }
         )
         .catch(() => {});
@@ -1068,7 +1176,7 @@ const approveWithdrawalRequest = async (
             request.user,
             "withdrawal",
             "Withdrawal approved",
-            `Your withdrawal of ₹${request.amount} has been approved.`,
+            `Your withdrawal of ₹${request.amount} has been approved.${request.feeAmount > 0 ? ` ₹${formatInr(getPayoutAmount(request))} will be paid out after a ₹${formatInr(request.feeAmount)} withdrawal fee.` : ""}`,
             { withdrawalRequestId: String(request._id) }
         )
         .catch(() => {});

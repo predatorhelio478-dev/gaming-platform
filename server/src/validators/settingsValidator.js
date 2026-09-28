@@ -191,6 +191,65 @@ const validateBusinessRules = (
         }
 
 
+        // Withdrawal fee tiers (see services/withdrawalFeeService.js)
+
+        const feeTierMaxKeys = [
+            "withdrawal_fee_tier1_max",
+            "withdrawal_fee_tier2_max",
+            "withdrawal_fee_tier3_max",
+        ];
+
+        const feePercentKeys = [
+            "withdrawal_fee_tier1_percent",
+            "withdrawal_fee_tier2_percent",
+            "withdrawal_fee_tier3_percent",
+            "withdrawal_fee_tier4_percent",
+        ];
+
+        for (const key of [...feeTierMaxKeys, ...feePercentKeys]) {
+
+            if (
+                values[key] !== undefined &&
+                (
+                    typeof values[key] !== "number" ||
+                    !Number.isFinite(values[key]) ||
+                    values[key] < 0
+                )
+            ) {
+                return `${key} must be a valid non-negative number.`;
+            }
+        }
+
+        for (const key of feePercentKeys) {
+
+            if (
+                values[key] !== undefined &&
+                values[key] > 100
+            ) {
+                return `${key} cannot be more than 100%.`;
+            }
+        }
+
+        const [tier1Max, tier2Max, tier3Max] =
+            feeTierMaxKeys.map((key) => values[key]);
+
+        if (
+            tier1Max !== undefined &&
+            tier2Max !== undefined &&
+            tier1Max >= tier2Max
+        ) {
+            return "Withdrawal fee tier 1 limit must be lower than the tier 2 limit.";
+        }
+
+        if (
+            tier2Max !== undefined &&
+            tier3Max !== undefined &&
+            tier2Max >= tier3Max
+        ) {
+            return "Withdrawal fee tier 2 limit must be lower than the tier 3 limit.";
+        }
+
+
         const modeFields = [
             "payment_mode",
             "withdrawal_mode",

@@ -661,6 +661,20 @@ export const createWithdrawalRequest =
     };
 
 
+// Server-calculated fee for a withdrawal amount - the same
+// calculation the create endpoint charges.
+export const getWithdrawalFeePreview =
+    async (
+        amount
+    ) => {
+
+        return await apiRequest(
+            `/wallet/withdrawal-requests/fee-preview?amount=${encodeURIComponent(amount)}`
+        );
+
+    };
+
+
 export const getMyWithdrawalRequests =
     async (
         params = {}

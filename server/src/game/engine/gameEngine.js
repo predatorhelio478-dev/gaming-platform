@@ -883,11 +883,38 @@ const processRound = async () => {
                 currentRound._id
             );
 
+        // Admin toggle (Settings -> game.lowest_bet_wins). Falls
+        // back to ON - the long-standing behavior - if settings
+        // can't be read, so a transient DB error never silently
+        // changes how results are decided.
+        let lowestBetWins = true;
+
+        try {
+
+            lowestBetWins =
+                (
+                    await settingsCache.getValue(
+                        "game",
+                        "lowest_bet_wins",
+                        true
+                    )
+                ) !== false;
+
+        } catch {
+
+            lowestBetWins = true;
+
+        }
+
         const {
             result,
             lowestAmount,
             tiedColors,
-        } = generateResult(colorTotals);
+            mode,
+        } = generateResult(
+            colorTotals,
+            { lowestBetWins }
+        );
 
 
         console.log(
@@ -897,6 +924,7 @@ const processRound = async () => {
 
         console.log(
             `Round ${currentRound.roundNumber} Result: ${result}` +
+            (mode === "random" ? " (random)" : "") +
             (
                 tiedColors.length > 1
                     ? ` (tie-break among: ${tiedColors.join(", ")} @ ${lowestAmount})`

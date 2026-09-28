@@ -4,6 +4,9 @@ const depositService =
 const withdrawalService =
     require("../services/withdrawalService");
 
+const withdrawalFeeService =
+    require("../services/withdrawalFeeService");
+
 
 // ==========================================================
 // CREATE DEPOSIT REQUEST
@@ -208,6 +211,10 @@ const createWithdrawalRequest = async (req, res) => {
             upiId,
             bankAccountNumber,
             bankIfsc,
+            // The fee the user was shown and confirmed - only
+            // compared against the server-calculated fee, never
+            // used as the fee itself.
+            expectedFee,
         } = req.body;
 
         const request =
@@ -216,7 +223,8 @@ const createWithdrawalRequest = async (req, res) => {
                 amount,
                 payoutMethod,
                 payoutDetails,
-                { upiId, bankAccountNumber, bankIfsc }
+                { upiId, bankAccountNumber, bankIfsc },
+                { expectedFee }
             );
 
         let message =
@@ -251,6 +259,7 @@ const createWithdrawalRequest = async (req, res) => {
             success: false,
             code: error.code || null,
             message: error.message || "Unable to submit withdrawal request.",
+            ...(error.feeQuote ? { feeQuote: error.feeQuote } : {}),
         });
 
     }
@@ -261,6 +270,61 @@ const createWithdrawalRequest = async (req, res) => {
 // ==========================================================
 // MY WITHDRAWAL REQUESTS
 // ==========================================================
+
+// ======================================================
+// WITHDRAWAL FEE PREVIEW
+// ======================================================
+//
+// Same calculation the create endpoint charges (see
+// withdrawalFeeService), so the fee shown before confirming
+// is exactly the fee that will be applied.
+
+const getWithdrawalFeePreview = async (req, res) => {
+
+    try {
+
+        const userId =
+            req.user?.id || req.user?._id;
+
+        const amount =
+            Number(req.query.amount);
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Enter a valid amount to see the withdrawal fee.",
+            });
+
+        }
+
+        const quote =
+            await withdrawalFeeService.calculateWithdrawalFee(
+                userId,
+                amount
+            );
+
+        return res.status(200).json({
+            success: true,
+            data: quote,
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Withdrawal Fee Preview Error:",
+            error.message
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Unable to calculate the withdrawal fee right now.",
+        });
+
+    }
+
+};
+
 
 const getMyWithdrawalRequests = async (req, res) => {
 
@@ -305,5 +369,6 @@ module.exports = {
     verifyRazorpayPayment,
     getMyDepositRequests,
     createWithdrawalRequest,
+    getWithdrawalFeePreview,
     getMyWithdrawalRequests,
 };

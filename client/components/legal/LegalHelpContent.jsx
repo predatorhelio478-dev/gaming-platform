@@ -10,6 +10,13 @@ import {
 import Link from "next/link";
 
 import {
+    TERMS_AND_CONDITIONS,
+    PRIVACY_POLICY,
+} from "@/lib/legalDocuments";
+
+import { getWithdrawalFeeRules } from "@/lib/withdrawalFees";
+
+import {
     FileText,
     ShieldCheck,
     HeartHandshake,
@@ -110,6 +117,107 @@ const renderTextBlock = (text, fallback) => {
 
 
 // ======================================================
+// LEGAL DOCUMENT (Terms & Conditions / Privacy Policy)
+// ======================================================
+//
+// Formats the plain-text documents (default text in
+// lib/legalDocuments.js, or admin-edited text from Settings ->
+// Legal) using a simple convention:
+//   "1. Heading" -> bold section heading
+//   "- text"     -> bullet point
+//   other lines  -> paragraph
+// Text that doesn't follow the convention still renders as
+// readable paragraphs.
+
+const LEGAL_HEADING = /^\d+\.\s+\S/;
+
+const renderLegalDocument = (text) => {
+
+    const blocks = [];
+    let current = { heading: null, lines: [] };
+
+    for (const rawLine of String(text || "").split(/\r?\n/)) {
+
+        const line = rawLine.trim();
+
+        if (!line) continue;
+
+        if (LEGAL_HEADING.test(line)) {
+
+            if (current.heading || current.lines.length) {
+                blocks.push(current);
+            }
+
+            current = { heading: line, lines: [] };
+            continue;
+
+        }
+
+        current.lines.push(line);
+
+    }
+
+    if (current.heading || current.lines.length) {
+        blocks.push(current);
+    }
+
+    return (
+        <div className="space-y-5">
+
+            {blocks.map((block, blockIndex) => {
+
+                const bullets = block.lines.filter((line) => line.startsWith("- "));
+
+                // Sub-points are numbered from their section: "1." -> 1.1, 1.2 ...
+                const sectionNumber =
+                    block.heading?.match(/^(\d+)\./)?.[1] || null;
+
+                return (
+                    <section key={blockIndex}>
+
+                        {block.heading && (
+                            <h3 className="mb-2 text-[15px] font-bold text-white">
+                                {block.heading}
+                            </h3>
+                        )}
+
+                        {block.lines.map((line, lineIndex) =>
+                            line.startsWith("- ") ? null : (
+                                <p key={`p-${lineIndex}`} className="text-sm leading-6 text-slate-400">
+                                    {line}
+                                </p>
+                            )
+                        )}
+
+                        {bullets.length > 0 && (
+                            <ul className="space-y-1.5">
+                                {bullets.map((line, lineIndex) => (
+                                    <li key={`li-${lineIndex}`} className="flex gap-2.5 text-sm leading-6 text-slate-400">
+                                        {sectionNumber ? (
+                                            <span className="min-w-[2rem] shrink-0 font-bold text-slate-200">
+                                                {sectionNumber}.{lineIndex + 1}
+                                            </span>
+                                        ) : (
+                                            <span aria-hidden="true" className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400/80" />
+                                        )}
+                                        <span>{line.slice(2)}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+
+                    </section>
+                );
+
+            })}
+
+        </div>
+    );
+
+};
+
+
+// ======================================================
 // LEGAL & HELP PAGE
 // ======================================================
 
@@ -182,9 +290,9 @@ export default function LegalHelpContent() {
                 id: "terms",
                 icon: FileText,
                 title: "Terms & Conditions",
-                body: renderTextBlock(
-                    legal.terms_and_conditions,
-                    `Our full Terms & Conditions will be published here by the ${siteName} team. Please contact Support if you have questions in the meantime.`
+                body: renderLegalDocument(
+                    String(legal.terms_and_conditions || "").trim() ||
+                        TERMS_AND_CONDITIONS
                 ),
             },
 
@@ -192,9 +300,9 @@ export default function LegalHelpContent() {
                 id: "privacy",
                 icon: ShieldCheck,
                 title: "Privacy Policy",
-                body: renderTextBlock(
-                    legal.privacy_policy,
-                    `Our full Privacy Policy will be published here by the ${siteName} team. Please contact Support if you have questions in the meantime.`
+                body: renderLegalDocument(
+                    String(legal.privacy_policy || "").trim() ||
+                        PRIVACY_POLICY
                 ),
             },
 
@@ -283,6 +391,24 @@ export default function LegalHelpContent() {
                         <p>
                             {withdrawalVerificationText(user)} Withdrawals are paid out via Bank Transfer or UPI, and are either processed automatically or reviewed by our team before payout, depending on current configuration.
                         </p>
+                        {(() => {
+                            const feeRules = getWithdrawalFeeRules(payment);
+                            return feeRules.enabled ? (
+                                <div>
+                                    <p className="font-semibold text-slate-300">Withdrawal fees</p>
+                                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                        {feeRules.tiers.map((tier) => (
+                                            <SettingFact key={tier.label} label={tier.label} value={`${tier.percent}%`} />
+                                        ))}
+                                    </div>
+                                    <p className="mt-2">
+                                        {feeRules.basisText} {feeRules.deductionText} The exact fee and the amount you will receive are shown on the Withdrawal page before you confirm.
+                                    </p>
+                                </div>
+                            ) : (
+                                <p>No withdrawal fee is currently charged.</p>
+                            );
+                        })()}
                     </div>
                 ),
             },
